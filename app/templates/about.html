@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Tentang Data{% endblock %}
+{% block content %}
+<section class="page-head narrow">
+  <h1>Tentang data</h1>
+  <p>Aplikasi ini masih menggunakan data contoh. Nama lokasi, harga, dan rating belum menggambarkan kondisi sebenarnya.</p>
+</section>
+<section class="content-card narrow prose">
+  <h2>Apa arti status?</h2>
+  <p>“Masih Ada” berarti kursi ditemukan saat pemeriksaan terakhir. Status ini tidak menunjukkan apakah kursi sedang kosong atau berfungsi saat Anda tiba.</p>
+  <h2>Bagaimana data masuk?</h2>
+  <p>Petugas mengirim usulan, lalu admin memeriksa sumber dan isinya sebelum diterbitkan. Kesalahan penulisan diperbaiki sebagai koreksi. Perubahan di lapangan dicatat dalam riwayat publik.</p>
+  <h2>Bagaimana rating dihitung?</h2>
+  <p>Rating diberikan setelah memakai kursi pada satu lokasi. Nilai hanya tersedia untuk area yang memang mempunyai fitur pada tipe tersebut. Rata-rata lokasi tampil setelah ada sedikitnya 5 penilai terverifikasi untuk area yang sama.</p>
+  <h2>Data apa yang tidak dimuat?</h2>
+  <p>Kursi pajangan showroom, unit demo penjualan, dan kursi milik pribadi di rumah tidak dimuat. Fasilitas karyawan atau penghuni dapat dicatat, tetapi disembunyikan dari hasil pencarian bawaan.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, placement_summary, stars_input %}
+{% block title %}Rating {{ placement.brand.name if placement.brand else 'Kursi' }} di {{ placement.spot.venue.name }}{% endblock %}
+{% block content %}
+<section class="page-head narrow">
+  <a class="back-link" href="/venue/{{ placement.spot.venue.slug }}/titik/{{ placement.spot.slug }}">Kembali ke detail titik</a>
+  <p class="eyebrow">Penempatan yang dinilai</p>
+  <h1>{{ placement.brand.name if placement.brand else 'Merk belum terkonfirmasi' }} · {{ placement.chair_type.name if placement.chair_type else 'Tipe belum terkonfirmasi' }}</h1>
+  <p class="lead">di {{ placement.spot.venue.name }}, lantai {{ placement.spot.floor }}, {{ placement.spot.name }}.</p>
+  {{ placement_summary(placement, format_rupiah, payment_labels, cost_labels) }}
+</section>
+
+{% if rating_unavailable %}
+<section class="content-card narrow">
+  <h2>Rating belum dibuka</h2>
+  <p>Merk, tipe, atau daftar area pijat pada tipe ini belum lengkap. Rating dibuka setelah admin mengonfirmasi fitur areanya.</p>
+</section>
+{% else %}
+<section class="content-section narrow">
+  <h2>Ringkasan per area badan</h2>
+  <p class="section-intro">Rata-rata lokasi baru tampil setelah lima penilai terverifikasi. Area tanpa fitur tidak pernah dihitung sebagai nilai rendah.</p>
+  <div class="rating-table" role="table" aria-label="Ringkasan rating per area badan">
+    <div class="rating-row rating-head" role="row"><span>Area</span><span>Hasil</span></div>
+    {% for row in summary %}
+    <div class="rating-row {% if row.support_status == 'tidak_didukung' %}is-unsupported{% endif %}" role="row">
+      <strong>{{ row.area.label }}</strong>
+      <span class="rating-value">
+      {% if row.support_status == 'tidak_didukung' %}
+        <span>Tidak ada fitur. Area ini tidak dinilai.</span>
+      {% elif row.support_status == 'belum_dikonfirmasi' %}
+        <span>Fitur belum dikonfirmasi. Area ini belum dinilai.</span>
+      {% elif row.show_local %}
+        <span><strong class="score-number num">{{ format_decimal(row.local.average) }}</strong> <span class="muted">dari 5</span></span>
+        <span class="meter" aria-hidden="true"><span style="width: {{ ((row.local.average or 0) / 5 * 100) | round(0) }}%"></span></span>
+        <span>berdasarkan {{ row.local.count }} penilai.</span>
+        <small>Sumber: {{ row.local.account_count }} akun · {{ row.local.anonymous_count }} anonim.</small>
+      {% elif row.show_global %}
+        <span class="meter-label">Kemajuan lokasi ini: {{ row.local.count }} dari 5 penilai</span>
+        <span class="meter is-progress" aria-hidden="true"><span style="width: {{ (row.local.count / 5 * 100) | round(0) }}%"></span></span>
+        <span>Lokasi ini mempunyai {{ row.local.count }} dari 5 penilai minimum. Sebagai pembanding, semua lokasi {{ placement.chair_type.name }} memiliki rata-rata <strong class="num">{{ format_decimal(row.global.average) }}</strong> dari 5 berdasarkan {{ row.global.count }} penilai.</span>
+        <small>Pembanding semua lokasi: {{ row.global.account_count }} akun · {{ row.global.anonymous_count }} anonim.</small>
+      {% else %}
+        <span class="meter-label">Kemajuan menuju rata-rata lokasi</span>
+        <span class="meter is-progress" aria-hidden="true"><span style="width: {{ (row.local.count / 5 * 100) | round(0) }}%"></span></span>
+        <span>Rata-rata ditampilkan setelah 5 penilai terverifikasi. Lokasi ini mempunyai {{ row.local.count }} penilai; seluruh lokasi tipe ini mempunyai {{ row.global.count }} penilai.</span>
+      {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="content-card narrow">
+  {% if own_rating %}
+    {% set display_version = own_rating.pending_version or own_rating.active_version or (own_rating.versions[-1] if own_rating.versions else none) %}
+    <h2>Rating Anda</h2>
+    {% if own_rating.pending_version and own_rating.active_version %}
+      <p class="notice">Anda mempunyai koreksi yang sedang diperiksa. Versi yang disetujui sebelumnya tetap dihitung.</p>
+    {% elif own_rating.pending_version %}
+      <p class="notice">Rating Anda masih menunggu pemeriksaan admin.</p>
+    {% elif own_rating.active_version %}
+      <p class="notice success">Rating Anda sudah disetujui dan dihitung.</p>
+    {% elif display_version and display_version.status == 'rejected' %}
+      <p class="notice warn">Rating terakhir Anda ditolak{% if display_version.review_note %}: {{ display_version.review_note }}{% endif %}. Anda dapat mengirim koreksi.</p>
+    {% endif %}
+    <h3>Koreksi rating</h3>
+    <p class="muted">Koreksi memakai rating yang sama, sehingga jumlah penilai tidak bertambah. Merk, tipe, dan lokasi tidak dapat diganti.</p>
+    <form method="post" action="/ratings/{{ own_rating.id }}/koreksi" class="rating-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label><span>Tanggal memakai kursi</span><input type="date" name="usage_date" required max="{{ today.isoformat() }}" value="{{ display_version.usage_date.isoformat() if display_version else '' }}"></label>
+      {% set current_scores = {} %}
+      {% if display_version %}{% for score in display_version.scores %}{% set _ = current_scores.update({score.body_area_id: score.stars}) %}{% endfor %}{% endif %}
+      {% for mapping in placement.chair_type.supported_areas|sort(attribute='body_area.sort_order') %}
+        <div class="score-field">
+          <span class="area-name"><strong>{{ mapping.body_area.label }}</strong>{% if mapping.mechanism %}<small>{{ mapping.mechanism | replace('_', ' ') }}</small>{% endif %}</span>
+          <span>{{ stars_input(mapping.body_area_id, 'correct', current_scores.get(mapping.body_area_id, 0)) }}<small class="score-help">Pilih “Tidak dinilai” bila area ini tidak Anda rasakan.</small></span>
+        </div>
+      {% endfor %}
+      <button class="button primary" type="submit">{{ icon('pencil') }} Kirim koreksi untuk diperiksa</button>
+    </form>
+  {% else %}
+    <h2>Beri rating setelah memakai</h2>
+    <p>Nilai hanya area yang didukung tipe ini dan benar-benar Anda rasakan. Rating dihitung setelah diperiksa admin.</p>
+    {% if current_user %}<p class="muted">Anda menilai dengan akun {{ current_user.name }}.</p>{% else %}<p class="muted">Anda menilai secara anonim. Token acak pada browser dipakai untuk mencegah rating ganda dan membantu pemeriksaan. Token itu hilang bila cookie dihapus.</p>{% endif %}
+    <form method="post" action="/nilai/{{ placement.id }}" class="rating-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label><span>Tanggal memakai kursi</span><input type="date" name="usage_date" required max="{{ today.isoformat() }}"></label>
+      {% for mapping in placement.chair_type.supported_areas|sort(attribute='body_area.sort_order') %}
+        <div class="score-field">
+          <span class="area-name"><strong>{{ mapping.body_area.label }}</strong>{% if mapping.mechanism %}<small>{{ mapping.mechanism | replace('_', ' ') }}</small>{% endif %}</span>
+          <span>{{ stars_input(mapping.body_area_id, 'new') }}<small class="score-help">Pilih “Tidak dinilai” bila area ini tidak Anda rasakan.</small></span>
+        </div>
+      {% endfor %}
+      <button class="button primary" type="submit">{{ icon('star') }} Kirim rating untuk diperiksa</button>
+    </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

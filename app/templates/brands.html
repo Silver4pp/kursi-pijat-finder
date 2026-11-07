@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Merk dan Tipe Kursi Pijat{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">Ringkasan berdasarkan pemakaian</p>
+  <h1>Merk dan tipe</h1>
+  <p>Setiap tipe dinilai terpisah. Area yang tidak mempunyai fitur tidak diberi nilai dan tidak menurunkan rata-rata.</p>
+</section>
+{% for brand in brands %}
+<section class="content-section">
+  <h2>{{ brand.name }}</h2>
+  <div class="card-grid">
+  {% for chair_type in brand.chair_types %}
+    <article class="type-card">
+      <p class="eyebrow">{{ brand.name }}</p>
+      <h3>{{ chair_type.name }}</h3>
+      <div class="tag-list" aria-label="Area badan yang didukung">
+        {% for mapping in chair_type.body_areas|sort(attribute='body_area.sort_order') if mapping.support_status == 'didukung' %}
+          <span class="tag">{{ mapping.body_area.label }}</span>
+        {% else %}
+          <span class="tag">Fitur belum dikonfirmasi</span>
+        {% endfor %}
+      </div>
+      <ul class="summary-mini">
+      {% for row in summaries[brand.id][chair_type.id] if row.support_status == 'didukung' %}
+        <li>{{ row.area.label }}: {% if row.show %}<strong class="num">{{ format_decimal(row.summary.average) }}</strong> dari 5 ({{ row.summary.count }} penilai){% else %}{{ row.summary.count }} dari 5 penilai minimum{% endif %}</li>
+      {% endfor %}
+      </ul>
+      <a class="button secondary" href="/merk/{{ brand.slug }}/{{ chair_type.slug }}">Lihat lokasi dan ringkasan</a>
+    </article>
+  {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

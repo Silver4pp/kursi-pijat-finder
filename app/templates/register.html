@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Daftar{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <p class="eyebrow">Mulai memberi rating</p>
+  <h1>Daftar akun</h1>
+  <p>Dengan akun, Anda bisa melihat dan mengoreksi rating. Anda juga bisa memberi rating tanpa akun.</p>
+  {% if error %}<p class="notice warn">{{ error }}</p>{% endif %}
+  <form method="post" action="/daftar" class="stack-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label><span>Nama</span><input type="text" name="name" required autocomplete="name"></label>
+    <label><span>Email</span><input type="email" name="email" required autocomplete="email"></label>
+    <label><span>Kata sandi</span><input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+    <button class="button primary full" type="submit">Buat akun</button>
+  </form>
+</section>
+{% endblock %}

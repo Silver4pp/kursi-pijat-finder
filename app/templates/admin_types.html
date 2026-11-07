@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Master Tipe Kursi{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Master tipe kursi</h1><p>Peta area menentukan kolom rating yang muncul. Jangan tandai area sebagai didukung sebelum sumbernya cukup.</p></section>
+<section class="content-section"><div class="card-grid">
+{% for chair_type in chair_types %}
+<article class="type-card"><h2>{{ chair_type.brand.name }} · {{ chair_type.name }}</h2><p>{{ chair_type.supported_areas|length }} area didukung.</p><a class="button secondary" href="/admin/master-tipe/{{ chair_type.id }}">Ubah fitur area</a></article>
+{% endfor %}
+</div></section>
+{% endblock %}

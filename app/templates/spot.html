@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, placement_summary %}
+{% block title %}{{ spot.name }} di {{ venue.name }}{% endblock %}
+{% block content %}
+<section class="page-head narrow detail-hero">
+  <a class="back-link" href="/venue/{{ venue.slug }}">Semua titik di {{ venue.name }}</a>
+  <p class="eyebrow">{{ venue.name }} · {{ venue.admin_city }}</p>
+  <h1>{{ spot.name }}</h1>
+  <p class="lead">{{ spot.zone_landmark }}</p>
+
+  <div class="quick-facts" aria-label="Ringkasan cepat titik">
+    <div>
+      <span>Status</span>
+      <strong>{{ 'Masih Ada' if spot.existence_status == 'ada' else 'Sudah Tidak Ada' }}</strong>
+    </div>
+    <div><span>Lantai</span><strong>{{ spot.floor }}</strong></div>
+    <div><span>Akses</span><strong>{{ spot.access_labels | join(', ') }}</strong></div>
+    <div>
+      <span>Terakhir diperiksa</span>
+      <strong>{% if spot.last_verified_at %}{{ spot.last_verified_at.strftime('%d-%m-%Y') }}{% else %}Belum dicatat{% endif %}</strong>
+    </div>
+  </div>
+
+  <div class="detail-actions">
+    <a class="button primary" href="https://www.google.com/maps/dir/?api=1&destination={{ venue.latitude }},{{ venue.longitude }}" target="_blank" rel="noopener">{{ icon('route') }} Buka rute ke gedung</a>
+    <span class="status {{ 'is-ada' if spot.existence_status == 'ada' else 'is-tidak' }}">{{ icon('check' if spot.existence_status == 'ada' else 'x') }} {{ 'Masih Ada' if spot.existence_status == 'ada' else 'Sudah Tidak Ada' }}</span>
+    {% if spot.last_verified_at %}<span class="muted small">dari {{ method_labels.get(spot.verification_method, spot.verification_method) }}</span>{% endif %}
+  </div>
+</section>
+
+<div class="two-column narrow">
+  <section class="content-card">
+    <h2>{{ icon('map-pin') }} Cara menemukan titiknya</h2>
+    <dl class="facts stacked">
+      <div><dt>Gedung</dt><dd>{{ venue.name }}</dd></div>
+      <div><dt>Alamat</dt><dd>{{ venue.address }}</dd></div>
+      <div><dt>Lantai</dt><dd>{{ spot.floor }}</dd></div>
+      {% if spot.recommended_entrance %}<div><dt>Pintu masuk yang disarankan</dt><dd>{{ spot.recommended_entrance }}</dd></div>{% endif %}
+      <div><dt>Patokan</dt><dd>{{ spot.zone_landmark }}</dd></div>
+      {% if spot.walking_directions %}<div><dt>Petunjuk berjalan</dt><dd>{{ spot.walking_directions }}</dd></div>{% endif %}
+    </dl>
+    {% if photos %}
+      <div class="photo-grid">
+      {% for photo in photos %}
+        <figure><img src="/photos/{{ photo.id }}" alt="{{ photo.caption or 'Foto patokan titik kursi pijat' }}">{% if photo.caption %}<figcaption>{{ photo.caption }}</figcaption>{% endif %}</figure>
+      {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  <aside class="content-card">
+    <h2>{{ icon('users') }} Siapa yang boleh masuk</h2>
+    <div class="tag-list">{% for label in spot.access_labels %}<span class="tag">{{ label }}</span>{% endfor %}</div>
+    {% if spot.access_notes %}<p>{{ spot.access_notes }}</p>{% endif %}
+    {% if spot.is_private_only %}<p class="notice">Fasilitas ini disembunyikan dari hasil pencarian bawaan karena tidak terbuka untuk pengunjung umum.</p>{% endif %}
+  </aside>
+</div>
+
+<section class="content-section narrow">
+  <h2>Kursi pada titik ini</h2>
+  <p class="section-intro">Jumlah adalah unit yang terakhir terkonfirmasi. Harga dan pembayaran dapat berubah mengikuti operator di lokasi.</p>
+  <div class="placement-list">
+  {% for placement in placements %}
+    <article class="placement-card">
+      {{ placement_summary(placement, format_rupiah, payment_labels, cost_labels) }}
+      <div class="placement-actions">
+        {% if placement.can_rate %}
+          <a class="button primary" href="/nilai/{{ placement.id }}">{{ icon('star') }} Lihat ringkasan dan beri rating</a>
+        {% else %}
+          <p class="muted">Rating belum dibuka karena merk, tipe, atau area pijatnya belum dikonfirmasi.</p>
+        {% endif %}
+        {% if placement.brand and placement.chair_type %}
+          <a class="button ghost" href="/merk/{{ placement.brand.slug }}/{{ placement.chair_type.slug }}">Ringkasan tipe</a>
+        {% endif %}
+      </div>
+    </article>
+  {% else %}
+    <p>Belum ada penempatan kursi yang berlaku pada titik ini.</p>
+  {% endfor %}
+  </div>
+</section>
+
+<section class="content-section narrow">
+  <h2>{{ icon('history') }} Riwayat perubahan nyata</h2>
+  {% if events %}
+    <ol class="timeline">
+    {% for event in events %}
+      <li><time>{{ event.effective_date.strftime('%d-%m-%Y') }}</time><span>{{ event.summary }}</span></li>
+    {% endfor %}
+    </ol>
+  {% else %}
+    <p class="muted">Belum ada perubahan nyata yang dicatat setelah titik ini diterbitkan.</p>
+  {% endif %}
+</section>
+{% endblock %}

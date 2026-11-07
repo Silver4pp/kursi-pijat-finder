@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Input Data Internal{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">Ruang petugas</p>
+  <h1>Input dan usulan data</h1>
+  <p>Usulan tidak langsung terbit. Admin memeriksa sumber, patokan, akses, merk, tipe, jumlah, dan foto terlebih dahulu.</p>
+  <a class="button primary" href="/internal/usulan-baru">{{ icon('plus') }} Usulkan titik baru</a>
+</section>
+
+<section class="content-section">
+  <h2>Usulan saya</h2>
+  {% if my_requests %}
+  <div class="table-like">
+    {% for item in my_requests %}
+    <div class="table-row">
+      <span><strong>{{ 'Lokasi baru' if item.kind == 'create_location' else 'Perubahan titik' }}</strong><small>Dibuat {{ item.created_at.strftime('%d-%m-%Y %H:%M') }}</small></span>
+      <span class="badge">{{ item.status }}</span>
+      <span>{{ item.review_note or '-' }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p>Belum ada usulan dari akun ini.</p>{% endif %}
+</section>
+
+<section class="content-section">
+  <h2>Usulkan perubahan pada titik terbit</h2>
+  <div class="card-grid">
+  {% for spot in spots %}
+    <article class="spot-card">
+      <h3>{{ spot.venue.name }}</h3>
+      <p>Lantai {{ spot.floor }} · {{ spot.name }}</p>
+      <p class="muted">Versi data {{ spot.version }} · terakhir diperiksa {{ spot.last_verified_at.strftime('%d-%m-%Y') if spot.last_verified_at else '-' }}</p>
+      <a class="button secondary" href="/internal/titik/{{ spot.id }}/usulkan">Usulkan perubahan</a>
+    </article>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

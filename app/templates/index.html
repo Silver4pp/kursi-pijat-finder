@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Cari Kursi Pijat di Jakarta{% endblock %}
+{% block content %}
+{% set ns = namespace(active_filters=0, has_search=false) %}
+{% for key in ['city', 'category', 'brand_id', 'access', 'payment', 'min_qty', 'include_unknown_qty', 'lat', 'lng'] %}
+  {% if params.get(key) %}{% set ns.active_filters = ns.active_filters + 1 %}{% endif %}
+{% endfor %}
+{% if params.get('q') or ns.active_filters %}{% set ns.has_search = true %}{% endif %}
+
+<section class="hero home-hero" id="cari">
+  <div class="hero-copy">
+    <p class="eyebrow hero-label">KURSI PIJAT DI JAKARTA</p>
+    <h1>Cari kursi pijat <span>di Jakarta.</span></h1>
+    <p class="hero-lead">Cari gedung, lalu lihat lantai, akses, dan informasi kursinya.</p>
+  </div>
+
+  <form class="search-panel" method="get" action="/" aria-label="Pencarian kursi pijat">
+    <div class="search-panel-head">
+      <div><p class="panel-eyebrow">MULAI PENCARIAN</p><h2>Cari berdasarkan lokasi atau merk</h2></div>
+    </div>
+
+    <div class="search-line">
+      <label class="search-field">
+        <span class="sr-only">Cari gedung, daerah, merk, atau tipe</span>
+        <span class="input-with-icon">
+          {{ icon('search') }}
+          <input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Cari stasiun, mall, daerah, merk…" autocomplete="off">
+        </span>
+      </label>
+      <button class="button primary search-submit" type="submit">{{ icon('search') }} Cari</button>
+    </div>
+
+    <div class="quick-search" aria-label="Pencarian cepat">
+      <a href="/?q=stasiun"><span class="quick-icon">{{ icon('navigation') }}</span><span>Stasiun</span></a>
+      <a href="/?category=mall"><span class="quick-icon">{{ icon('building-2') }}</span><span>Mall</span></a>
+      <a href="/?payment=qris"><span class="quick-icon">{{ icon('banknote') }}</span><span>QRIS</span></a>
+      <a href="/?access=umum"><span class="quick-icon">{{ icon('users') }}</span><span>Akses umum</span></a>
+    </div>
+
+    <details class="filter-details" {% if ns.active_filters %}open{% endif %}>
+      <summary>
+        <span>{{ icon('sliders-horizontal') }} Filter hasil</span>
+        {% if ns.active_filters %}<span class="filter-count">{{ ns.active_filters }} aktif</span>{% else %}<span class="filter-hint">Kota · akses · bayar</span>{% endif %}
+      </summary>
+
+      <div class="filter-grid">
+        <label><span>Kota</span><select name="city"><option value="">Semua kota</option>{% for city in cities %}<option {% if params.get('city') == city %}selected{% endif %}>{{ city }}</option>{% endfor %}</select></label>
+        <label><span>Jenis gedung</span><select name="category"><option value="">Semua kategori</option>{% for code,label in categories.items() %}<option value="{{ code }}" {% if params.get('category') == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>Merk</span><select name="brand_id"><option value="">Semua merk</option>{% for brand in brands %}<option value="{{ brand.id }}" {% if params.get('brand_id') == brand.id %}selected{% endif %}>{{ brand.name }}</option>{% endfor %}</select></label>
+        <label><span>Akses untuk</span><select name="access"><option value="">Hasil bawaan</option>{% for group in access_groups %}<option value="{{ group.code }}" {% if params.get('access') == group.code %}selected{% endif %}>{{ group.label }}</option>{% endfor %}</select></label>
+        <label><span>Pembayaran</span><select name="payment"><option value="">Semua pembayaran</option>{% for code,label in payment_labels.items() %}<option value="{{ code }}" {% if params.get('payment') == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>Minimum kursi</span><input type="number" min="1" inputmode="numeric" name="min_qty" value="{{ params.get('min_qty','') }}" placeholder="Mis. 2"></label>
+      </div>
+
+      <label class="check-row"><input type="checkbox" name="include_unknown_qty" value="1" {% if params.get('include_unknown_qty') %}checked{% endif %}> Sertakan titik dengan jumlah kursi yang belum diketahui</label>
+      {% if hidden_unknown_qty %}<p class="filter-note">{{ hidden_unknown_qty }} titik tidak ditampilkan karena jumlah kursinya belum diketahui.</p>{% endif %}
+      <p class="filter-note">Fasilitas karyawan atau penghuni disembunyikan dari hasil bawaan. Pilih kelompok akses atau cari nama gedungnya.</p>
+      <button class="button primary apply-filters" type="submit">Terapkan filter</button>
+    </details>
+
+    <div class="actions search-actions">
+      <button class="button secondary near-button" type="button" id="near-me">{{ icon('navigation') }} <span data-near-label>Terdekat dari saya</span></button>
+      {% if ns.has_search %}<a class="button ghost" href="/">Reset pencarian</a>{% endif %}
+    </div>
+    <p id="search-status" class="form-status" aria-live="polite"></p>
+  </form>
+</section>
+
+<section class="explorer" id="explorer" data-view="list" aria-label="Hasil pencarian">
+  <div class="explorer-toolbar">
+    <div class="explorer-summary">
+      <p class="eyebrow">HASIL PENCARIAN</p>
+      <h2>Jelajahi lokasi <span class="result-total">{{ venue_items|length }} gedung · {{ spots|length }} titik</span></h2>
+      <p>{% if params.get('lat') and params.get('lng') %}Diurutkan dari lokasi terdekat.{% else %}Pilih gedung untuk melihat semua titik di dalamnya.{% endif %}</p>
+    </div>
+
+    <div class="view-toggle" role="group" aria-label="Pilih tampilan hasil">
+      <button type="button" data-view-target="map" aria-pressed="false">{{ icon('map-pin') }} Peta</button>
+      <button type="button" data-view-target="list" aria-pressed="true">{{ icon('layers') }} Daftar</button>
+    </div>
+  </div>
+
+  <div class="map-layout">
+    <div class="map-wrap" data-pane="map">
+      <div class="map-legend">
+        <span class="legend-pin" aria-hidden="true"></span>
+        <span><strong>Pin: titik kursi</strong><small>Lingkaran: jumlah gedung</small></span>
+      </div>
+      <div id="map" class="map" aria-label="Peta lokasi kursi pijat"></div>
+      <div id="map-loading" class="map-loading" role="status"><span class="spinner" aria-hidden="true"></span> Memuat pin gedung…</div>
+      <p class="map-note">{{ icon('map-pin') }} Kursi berada di dalam gedung. Gunakan lantai dan patokan pada detail titik.</p>
+
+      <div id="venue-panel" class="venue-panel" role="dialog" aria-modal="false" aria-labelledby="panel-title" tabindex="-1" hidden>
+        <span class="sheet-handle" aria-hidden="true"></span>
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Titik di gedung ini</p>
+            <h2 id="panel-title">Gedung</h2>
+            <p id="panel-subtitle" class="panel-subtitle">Pilih detail titik untuk rute dan rating.</p>
+          </div>
+          <button class="icon-button" id="panel-close" type="button" aria-label="Tutup panel titik">{{ icon('x') }}</button>
+        </div>
+        <div id="panel-spots" class="panel-spots" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <aside class="results" data-pane="list" aria-label="Daftar gedung hasil pencarian">
+      <div class="results-head">
+        <div>
+          <h2>Lokasi ditemukan</h2>
+          <p>Pilih lokasi untuk melihat detailnya.</p>
+        </div>
+        <span class="results-count">{{ venue_items|length }} lokasi</span>
+      </div>
+      <p class="results-note">{{ icon('shield-check') }} Status menunjukkan keberadaan terakhir yang terkonfirmasi, bukan kursi yang sedang kosong.</p>
+
+      {% if venue_items %}
+        <div class="venue-list">
+        {% for item in venue_items %}
+          {% set venue = item.venue %}
+          <article class="venue-card" data-venue-card="{{ venue.id }}">
+            <button class="venue-card-main" type="button" data-venue-id="{{ venue.id }}" data-name="{{ venue.name }}" data-lat="{{ venue.latitude }}" data-lng="{{ venue.longitude }}" aria-controls="venue-panel" aria-pressed="false" aria-label="Tampilkan titik di {{ venue.name }} pada peta">
+              <span class="venue-icon">{{ icon('building-2') }}</span>
+              <span class="venue-text">
+                <small class="venue-kicker">{{ categories.get(venue.category, venue.category) }} · {{ venue.admin_city }}{% if venue.district %} · {{ venue.district }}{% endif %}</small>
+                <strong>{{ venue.name }}</strong>
+                <small class="venue-meta">
+                  <span>{{ item.spots|length }} titik kursi</span>
+                  {% if item.distance is not none %}<span class="distance-pill">{{ icon('navigation') }} <span class="num">{{ format_decimal(item.distance) }}</span> km</span>{% endif %}
+                </small>
+              </span>
+              <span class="chev">Lihat →</span>
+            </button>
+
+            <div class="post-meta">{{ icon('map-pin') }} <strong>{{ item.spots|length }} titik di gedung ini</strong><span class="post-spacer"></span><a href="/venue/{{ venue.slug }}">Lihat gedung →</a></div>
+            <div class="spot-mini-list">
+              {% for spot in item.spots %}
+                <a href="/venue/{{ venue.slug }}/titik/{{ spot.slug }}" aria-label="Buka detail {{ spot.name }} di {{ venue.name }}">
+                  <span class="floor-badge">Lt. {{ spot.floor }}</span>
+                  <span class="spot-mini-text">
+                    <strong>{{ spot.name }}</strong>
+                    <small>{{ spot.zone_landmark }}</small>
+                    <small class="spot-mini-access">{{ spot.access_labels | join(', ') }}</small>
+                  </span>
+                  <span class="mini-detail">Detail</span>
+                </a>
+              {% endfor %}
+            </div>
+          </article>
+        {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          {{ icon('armchair', 'large-icon') }}
+          <h2>Belum ada titik yang cocok.</h2>
+          <p>Coba longgarkan filter, atau cari nama gedung secara langsung untuk melihat fasilitas dengan akses terbatas.</p>
+          <a class="button secondary" href="/">Hapus filter</a>
+        </div>
+      {% endif %}
+    </aside>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='vendor/Leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/Leaflet.markercluster/leaflet.markercluster.js') }}"></script>
+<script src="{{ url_for('static', path='js/map.js') }}?v=20261108-4"></script>
+{% endblock %}

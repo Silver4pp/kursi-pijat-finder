@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Usulkan Perubahan Titik{% endblock %}
+{% block content %}
+<section class="page-head narrow">
+  <h1>Usulkan perubahan titik</h1>
+  <p>{{ spot.venue.name }} · Lantai {{ spot.floor }} · {{ spot.name }}. Data publik tidak berubah sebelum admin menyetujui usulan ini.</p>
+</section>
+<form method="post" action="/internal/titik/{{ spot.id }}/usulkan" class="form-sheet narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="form-grid">
+    <label><span>Lantai</span><input name="floor" value="{{ spot.floor }}" required></label>
+    <label><span>Status keberadaan</span><select name="existence_status"><option value="ada" {% if spot.existence_status == 'ada' %}selected{% endif %}>Masih Ada</option><option value="tidak_ada" {% if spot.existence_status == 'tidak_ada' %}selected{% endif %}>Sudah Tidak Ada</option></select></label>
+    <label class="wide"><span>Zona dan patokan</span><input name="zone_landmark" value="{{ spot.zone_landmark }}" required></label>
+    <label><span>Pintu yang disarankan</span><input name="recommended_entrance" value="{{ spot.recommended_entrance or '' }}"></label>
+    <label class="wide"><span>Petunjuk berjalan</span><textarea name="walking_directions" rows="3">{{ spot.walking_directions or '' }}</textarea></label>
+    <label class="wide"><span>Catatan akses</span><textarea name="access_notes" rows="2">{{ spot.access_notes or '' }}</textarea></label>
+  </div>
+  <p class="label-title">Kelompok akses</p>
+  <div class="choice-grid">{% for group in access_groups %}<label class="check-card"><input type="checkbox" name="access_groups" value="{{ group.code }}" {% if group.code in spot.access_codes %}checked{% endif %}> {{ group.label }}</label>{% endfor %}</div>
+
+  <fieldset><legend>Pemeriksaan</legend>
+    <div class="form-grid">
+      <label><span>Tanggal diperiksa</span><input type="date" name="checked_date" value="{{ today.isoformat() }}" required></label>
+      <label><span>Metode</span><select name="check_method">{% for code,label in method_labels.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></label>
+      <label><span>Keyakinan</span><select name="confidence"><option value="kuat">Kuat</option><option value="sedang" selected>Sedang</option><option value="lemah">Lemah</option></select></label>
+      <label><span>Judul sumber</span><input name="source_title"></label>
+      <label><span>Jenis sumber</span><input name="source_type"></label>
+      <label class="wide"><span>URL sumber</span><input type="url" name="source_url"></label>
+      <label class="wide"><span>Bidang yang didukung</span><input name="fields_supported"></label>
+      <label class="wide"><span>Catatan</span><textarea name="notes" rows="3" placeholder="Jelaskan perubahan yang Anda temukan"></textarea></label>
+    </div>
+  </fieldset>
+  <button class="button primary" type="submit">Kirim usulan perubahan</button>
+</form>
+{% endblock %}

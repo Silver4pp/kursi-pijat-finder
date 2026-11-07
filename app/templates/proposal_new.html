@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Usulkan Titik Baru{% endblock %}
+{% block content %}
+<section class="page-head narrow"><h1>Usulkan titik baru</h1><p>Jangan masukkan kursi pajangan showroom, unit demo penjualan, atau kursi pribadi di rumah.</p></section>
+<form method="post" action="/internal/usulan-baru" enctype="multipart/form-data" class="form-sheet narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <fieldset><legend>Gedung</legend>
+    <label><span>Pilih gedung yang sudah ada</span><select name="existing_venue_id"><option value="">Tambah gedung baru</option>{% for venue in venues %}<option value="{{ venue.id }}">{{ venue.name }}</option>{% endfor %}</select></label>
+    <div class="form-grid">
+      <label><span>Nama gedung baru</span><input name="venue_name"></label>
+      <label><span>Kategori</span><select name="venue_category">{% for code,label in categories.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></label>
+      <label class="wide"><span>Alamat</span><input name="address"></label>
+      <label><span>Kota administrasi</span><select name="admin_city">{% for city in cities %}<option>{{ city }}</option>{% endfor %}</select></label>
+      <label><span>Kecamatan</span><input name="district"></label>
+      <label><span>Lintang</span><input name="latitude" inputmode="decimal" placeholder="-6.200000"></label>
+      <label><span>Bujur</span><input name="longitude" inputmode="decimal" placeholder="106.800000"></label>
+      <label class="wide"><span>Jam buka gedung</span><input name="opening_hours"></label>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Titik di dalam gedung</legend>
+    <div class="form-grid">
+      <label><span>Nama titik *</span><input name="spot_name" required placeholder="Area tunggu utara"></label>
+      <label><span>Lantai *</span><input name="floor" required placeholder="LG, 1, 2"></label>
+      <label class="wide"><span>Zona dan patokan *</span><input name="zone_landmark" required placeholder="Di dekat eskalator dan toko ..."></label>
+      <label><span>Pintu yang disarankan</span><input name="recommended_entrance"></label>
+      <label><span>Status keberadaan</span><select name="existence_status"><option value="ada">Masih Ada</option><option value="tidak_ada">Sudah Tidak Ada</option></select></label>
+      <label class="wide"><span>Petunjuk berjalan dalam gedung</span><textarea name="walking_directions" rows="3"></textarea></label>
+      <label class="wide"><span>Catatan akses</span><textarea name="access_notes" rows="2" placeholder="Tiket, boarding pass, kartu akses, atau syarat lain"></textarea></label>
+    </div>
+    <p class="label-title">Kelompok yang boleh mengakses</p>
+    <div class="choice-grid">{% for group in access_groups %}<label class="check-card"><input type="checkbox" name="access_groups" value="{{ group.code }}" {% if group.code == 'umum' %}checked{% endif %}> {{ group.label }}</label>{% endfor %}</div>
+  </fieldset>
+
+  <fieldset><legend>Kursi pertama pada titik ini</legend>
+    <div class="form-grid">
+      <label><span>Merk terdaftar</span><select name="brand_id"><option value="">Belum pasti atau isi nama baru</option>{% for brand in brands %}<option value="{{ brand.id }}">{{ brand.name }}</option>{% endfor %}</select></label>
+      <label><span>Nama merk baru atau yang terlihat</span><input name="brand_name"></label>
+      <label><span>Tipe terdaftar</span><select name="chair_type_id"><option value="">Belum pasti atau isi nama baru</option>{% for item in chair_types %}<option value="{{ item.id }}">{{ item.brand.name }} · {{ item.name }}</option>{% endfor %}</select></label>
+      <label><span>Nama tipe baru atau yang terlihat</span><input name="chair_type_name"></label>
+      <label><span>Operator</span><input name="operator_name"></label>
+      <label><span>Jumlah terkonfirmasi</span><input type="number" min="1" name="quantity" placeholder="Kosongkan bila belum terhitung"></label>
+      <label><span>Dasar jumlah</span><select name="quantity_basis"><option value="">Belum terhitung</option><option value="foto">Foto</option><option value="kunjungan">Kunjungan</option><option value="konfirmasi_venue">Konfirmasi pengelola gedung</option><option value="konfirmasi_operator">Konfirmasi operator</option></select></label>
+      <label><span>Jenis biaya</span><select name="cost_type">{% for code,label in cost_labels.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></label>
+      <label><span>Tipe tarif</span><select name="tariff_type"><option value="">Tidak diketahui</option><option value="paket_tetap">Paket tetap</option><option value="pilihan_durasi">Pilihan durasi</option><option value="per_menit">Per menit</option><option value="lainnya">Lainnya</option></select></label>
+      <label><span>Harga rupiah</span><input type="number" min="0" name="price_idr"></label>
+      <label><span>Durasi menit</span><input type="number" min="1" name="duration_minutes"></label>
+    </div>
+    <label class="check-row"><input type="checkbox" name="price_is_starting_from" value="1"> Harga adalah harga mulai</label>
+    <p class="label-title">Pembayaran yang terlihat</p>
+    <div class="choice-grid">{% for code,label in payment_labels.items() %}<label class="check-card"><input type="checkbox" name="payment_methods" value="{{ code }}"> {{ label }}</label>{% endfor %}</div>
+  </fieldset>
+
+  <fieldset><legend>Bukti dan pemeriksaan</legend>
+    <div class="form-grid">
+      <label><span>Judul sumber</span><input name="source_title"></label>
+      <label><span>Jenis sumber</span><input name="source_type" placeholder="artikel, situs resmi, kunjungan"></label>
+      <label class="wide"><span>URL sumber</span><input type="url" name="source_url"></label>
+      <label><span>Tanggal sumber</span><input type="date" name="source_published_date"></label>
+      <label><span>Tanggal diperiksa</span><input type="date" name="checked_date" value="{{ today.isoformat() }}" required></label>
+      <label><span>Metode pemeriksaan</span><select name="check_method">{% for code,label in method_labels.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></label>
+      <label><span>Tingkat keyakinan</span><select name="confidence"><option value="kuat">Kuat</option><option value="sedang" selected>Sedang</option><option value="lemah">Lemah</option></select></label>
+      <label class="wide"><span>Bidang yang didukung sumber</span><input name="fields_supported" placeholder="keberadaan; lantai; harga"></label>
+      <label class="wide"><span>Catatan riset</span><textarea name="research_notes" rows="3"></textarea></label>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Foto opsional</legend>
+    <div class="form-grid">
+      <label><span>Foto patokan</span><input type="file" name="photo" accept="image/*"></label>
+      <label><span>Tujuan foto</span><select name="photo_intended_use"><option value="bukti_internal">Bukti internal</option><option value="bukti_internal_dan_publik">Bukti internal dan publik</option><option value="publik">Publik</option></select></label>
+      <label class="wide"><span>keterangan foto</span><input name="photo_caption"></label>
+      <label class="wide"><span>Sumber dan lisensi foto</span><input name="photo_license_note" placeholder="Foto sendiri, izin tertulis, dan keterangan lain"></label>
+    </div>
+  </fieldset>
+  <button class="button primary" type="submit">Kirim usulan untuk diperiksa</button>
+</form>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_macros.html" import placement_summary %}
+{% block title %}{{ brand.name }} {{ chair_type.name }}{% endblock %}
+{% block content %}
+<section class="page-head narrow">
+  <a class="back-link" href="/merk">Semua merk dan tipe</a>
+  <p class="eyebrow">{{ brand.name }}</p>
+  <h1>{{ chair_type.name }}</h1>
+  {% if chair_type.notes %}<p>{{ chair_type.notes }}</p>{% endif %}
+</section>
+
+<section class="content-section narrow">
+  <h2>Ringkasan seluruh lokasi</h2>
+  <div class="rating-table">
+    <div class="rating-row rating-head"><span>Area</span><span>Hasil</span></div>
+    {% for row in summary %}
+    <div class="rating-row {% if row.support_status == 'tidak_didukung' %}is-unsupported{% endif %}"><strong>{{ row.area.label }}</strong><span>
+      {% if row.support_status == 'tidak_didukung' %}Tidak ada fitur. Area ini tidak dinilai.
+      {% elif row.support_status == 'belum_dikonfirmasi' %}Fitur belum dikonfirmasi.
+      {% elif row.show %}Rata-rata <strong class="num">{{ format_decimal(row.summary.average) }}</strong> dari 5 berdasarkan {{ row.summary.count }} penilai. <small>{{ row.summary.account_count }} akun · {{ row.summary.anonymous_count }} anonim.</small>
+      {% else %}Rata-rata ditampilkan setelah 5 penilai. Saat ini {{ row.summary.count }} penilai.
+      {% endif %}
+    </span></div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="content-section narrow">
+  <h2>Lokasi tipe ini</h2>
+  {% if placements %}
+  <div class="placement-list">
+  {% for placement in placements %}
+    <article class="placement-card">
+      <p><strong>{{ placement.spot.venue.name }}</strong> · Lantai {{ placement.spot.floor }} · {{ placement.spot.name }}</p>
+      {{ placement_summary(placement, format_rupiah, payment_labels, cost_labels) }}
+      <div class="actions">
+        <a class="button secondary" href="/venue/{{ placement.spot.venue.slug }}/titik/{{ placement.spot.slug }}">Detail titik</a>
+        {% if placement.can_rate %}<a class="button primary" href="/nilai/{{ placement.id }}">Rating lokasi ini</a>{% endif %}
+      </div>
+    </article>
+  {% endfor %}
+  </div>
+  {% else %}<p>Belum ada lokasi terbuka yang tercatat untuk tipe ini.</p>{% endif %}
+  {% if private_count %}<p class="muted">{{ private_count }} lokasi fasilitas terbatas tidak ditampilkan pada daftar ini.</p>{% endif %}
+</section>
+{% endblock %}

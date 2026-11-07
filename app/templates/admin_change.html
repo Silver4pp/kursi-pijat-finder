@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Periksa Usulan{% endblock %}
+{% block content %}
+<section class="page-head narrow">
+  <a class="back-link" href="/admin">Kembali ke antrean</a>
+  <h1>Periksa usulan</h1>
+  <p>Dikirim oleh {{ item.submitter.name }} pada {{ item.created_at.strftime('%d-%m-%Y %H:%M') }}.</p>
+  {% if item.submitter_id == current_user.id %}<p class="notice warn">Ini usulan Anda sendiri. Admin lain harus memeriksanya.</p>{% endif %}
+</section>
+
+<section class="content-card narrow">
+  <h2>Isi usulan</h2>
+  <pre class="payload">{{ payload_pretty }}</pre>
+  {% if item.staged_photo_name %}<p class="muted">Foto terunggah: {{ item.staged_photo_name }}. Pratinjau foto bertahap belum dibuka pada versi lokal ini.</p>{% endif %}
+</section>
+
+<form method="post" action="/admin/usulan/{{ item.id }}/keputusan" class="form-sheet narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if item.kind == 'spot_update' %}
+  <fieldset><legend>Jenis perubahan bila disetujui</legend>
+    <label class="check-card"><input type="radio" name="change_kind" value="lapangan" required> Perubahan nyata di lapangan. Catat pada riwayat publik.</label>
+    <label class="check-card"><input type="radio" name="change_kind" value="koreksi"> Koreksi kesalahan data. Perbarui tanggal pemeriksaan tanpa peristiwa publik.</label>
+  </fieldset>
+  {% endif %}
+  <label><span>Catatan pemeriksaan</span><textarea name="review_note" rows="3" placeholder="Jelaskan kekurangan bila dikembalikan atau alasan penolakan"></textarea></label>
+  <div class="actions">
+    <button class="button primary" type="submit" name="action" value="approve" {% if item.submitter_id == current_user.id %}disabled{% endif %}>Setujui dan terbitkan</button>
+    <button class="button secondary" type="submit" name="action" value="return" {% if item.submitter_id == current_user.id %}disabled{% endif %}>Kembalikan</button>
+    <button class="button danger" type="submit" name="action" value="reject" {% if item.submitter_id == current_user.id %}disabled{% endif %}>Tolak</button>
+  </div>
+</form>
+{% endblock %}

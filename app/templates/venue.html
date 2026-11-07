@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ venue.name }} - Kursi Pijat Finder{% endblock %}
+{% block content %}
+<section class="page-head">
+  <a class="back-link" href="/">Kembali ke peta</a>
+  <p class="eyebrow">{{ categories.get(venue.category, venue.category) }} · {{ venue.admin_city }}</p>
+  <h1>{{ venue.name }}</h1>
+  <p class="lead">{{ venue.address }}</p>
+
+  <div class="quick-facts" aria-label="Ringkasan gedung">
+    <div><span>Titik terbit</span><strong>{{ venue.spots | selectattr('is_published') | list | length }} titik</strong></div>
+    <div><span>Wilayah</span><strong>{{ venue.district or venue.admin_city }}</strong></div>
+    <div><span>Jam buka gedung</span><strong>{{ venue.opening_hours or 'Belum dicatat' }}</strong></div>
+    <div><span>Pin peta</span><strong>Gedung</strong></div>
+  </div>
+
+  <div class="detail-actions">
+    <a class="button primary" href="https://www.google.com/maps/dir/?api=1&destination={{ venue.latitude }},{{ venue.longitude }}" target="_blank" rel="noopener">{{ icon('route') }} Buka rute ke gedung</a>
+    <span class="muted small">Setelah sampai, gunakan lantai dan patokan pada detail titik.</span>
+  </div>
+</section>
+
+<section class="content-section">
+  <h2>Titik kursi di gedung ini</h2>
+  <div class="card-grid">
+  {% for spot in venue.spots if spot.is_published %}
+    <article class="spot-card">
+      <div class="spot-card-top">
+        <span class="floor-badge">Lantai {{ spot.floor }}</span>
+        <span class="status {{ 'is-ada' if spot.existence_status == 'ada' else 'is-tidak' }}">{{ icon('check' if spot.existence_status == 'ada' else 'x') }} {{ 'Masih Ada' if spot.existence_status == 'ada' else 'Sudah Tidak Ada' }}</span>
+      </div>
+      <h3>{{ spot.name }}</h3>
+      <p>{{ spot.zone_landmark }}</p>
+      <p class="muted">{{ spot.access_labels | join(', ') }}</p>
+      <a class="button secondary" href="/venue/{{ venue.slug }}/titik/{{ spot.slug }}">Lihat detail titik</a>
+    </article>
+  {% else %}
+    <p>Belum ada titik yang diterbitkan di gedung ini.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

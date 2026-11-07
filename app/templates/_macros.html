@@ -1,0 +1,39 @@
+{% macro icon(name, cls='') -%}
+<span class="icon {{ cls }}" style="--icon: url('/static/icons/{{ name }}.svg')" aria-hidden="true"></span>
+{%- endmacro %}
+
+{% macro stars_input(area_id, field_prefix, current=0) -%}
+<div class="rating-choice">
+  <div class="stars" role="radiogroup" aria-label="Pilih bintang untuk area ini">
+    {% for n in [5,4,3,2,1] %}
+      <input id="{{ field_prefix }}-{{ area_id }}-{{ n }}" type="radio" name="score_{{ area_id }}" value="{{ n }}" {% if current == n %}checked{% endif %}>
+      <label for="{{ field_prefix }}-{{ area_id }}-{{ n }}" aria-label="{{ n }} bintang" title="{{ n }} bintang">★</label>
+    {% endfor %}
+  </div>
+  <input class="clear-score-input" id="{{ field_prefix }}-{{ area_id }}-0" type="radio" name="score_{{ area_id }}" value="" {% if current == 0 %}checked{% endif %}>
+  <label class="clear-score-label" for="{{ field_prefix }}-{{ area_id }}-0">Tidak dinilai</label>
+</div>
+{%- endmacro %}
+
+{% macro placement_summary(placement, format_rupiah, payment_labels, cost_labels) -%}
+<div class="placement-head">
+  <div class="placement-title">
+    <span class="placement-brand">{{ placement.brand.name if placement.brand else 'Merk belum terkonfirmasi' }}</span>
+    <span class="placement-type">{{ placement.chair_type.name if placement.chair_type else 'Tipe belum terkonfirmasi' }}</span>
+  </div>
+  <span class="quantity">
+    {% if placement.quantity is not none %}<strong class="num">{{ placement.quantity }}</strong> kursi{% else %}Jumlah belum terhitung{% endif %}
+  </span>
+</div>
+<dl class="facts placement-facts">
+  <div class="fact-card"><dt>Jumlah terkonfirmasi</dt><dd>{% if placement.quantity is not none %}{{ placement.quantity }} unit{% else %}Belum terhitung{% endif %}</dd></div>
+  <div class="fact-card"><dt>Biaya</dt><dd>{{ cost_labels.get(placement.cost_type, placement.cost_type) }}</dd></div>
+  {% if placement.price_idr %}
+  <div class="fact-card fact-highlight"><dt>Harga</dt><dd>{% if placement.price_is_starting_from %}Mulai {% endif %}<strong>{{ format_rupiah(placement.price_idr) }}</strong>{% if placement.duration_minutes %} per {{ placement.duration_minutes }} menit{% endif %}</dd></div>
+  {% endif %}
+  {% if placement.payment_codes %}
+  <div class="fact-card"><dt>Pembayaran</dt><dd>{% for code in placement.payment_codes %}{{ payment_labels.get(code, code) }}{% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
+  {% endif %}
+  {% if placement.operator %}<div class="fact-card"><dt>Operator</dt><dd>{{ placement.operator.name }}</dd></div>{% endif %}
+</dl>
+{%- endmacro %}

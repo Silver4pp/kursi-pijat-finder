@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Masuk{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <p class="eyebrow">Selamat datang kembali</p>
+  <h1>Masuk</h1>
+  <p class="muted">Masuk untuk melihat rating atau mengelola data sesuai hak akses akun Anda.</p>
+  {% if error %}<p class="notice warn">{{ error }}</p>{% endif %}
+  <form method="post" action="/masuk" class="stack-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label><span>Email</span><input type="email" name="email" required autocomplete="email"></label>
+    <label><span>Kata sandi</span><input type="password" name="password" required autocomplete="current-password"></label>
+    <button class="button primary full" type="submit">Masuk</button>
+  </form>
+  <p>Belum punya akun? <a href="/daftar">Daftar untuk memberi rating</a>.</p>
+
+</section>
+{% endblock %}

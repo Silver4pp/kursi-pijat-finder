@@ -1,0 +1,105 @@
+{% from "_macros.html" import icon %}
+{% set current_path = request.url.path if request else '' %}
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Kursi Pijat Finder Jakarta{% endblock %}</title>
+  <meta name="description" content="Cari lokasi kursi pijat di Jakarta. Lihat lantai, akses, harga, dan ratingnya.">
+  <meta name="theme-color" content="#f7f8fc">
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/Leaflet/leaflet.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/Leaflet.markercluster/MarkerCluster.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}?v=20261104-2">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/modern.css') }}?v=1">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/social.css') }}?v=4">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% if current_path == '/' %}home-page{% endif %}">
+  <a class="skip-link" href="#main-content">Lewati ke isi utama</a>
+  <div class="demo-banner" role="note">
+    <span class="demo-dot" aria-hidden="true"></span>
+    <span><strong>Data contoh:</strong> lokasi dan informasi di halaman ini belum diverifikasi.</span>
+  </div>
+
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="brand" href="/" aria-label="Beranda Kursi Pijat Finder">
+        <span class="brand-mark">{{ icon('armchair') }}</span>
+        <span class="brand-text"><strong>Kursi Pijat Finder</strong><small>Peta kursi pijat Jakarta</small></span>
+      </a>
+
+      <nav class="main-nav" aria-label="Navigasi utama">
+        <a class="nav-link {% if current_path == '/' %}is-active{% endif %}" href="/" {% if current_path == '/' %}aria-current="page"{% endif %}>{{ icon('map-pin') }} Peta</a>
+        <a class="nav-link {% if current_path.startswith('/merk') %}is-active{% endif %}" href="/merk" {% if current_path.startswith('/merk') %}aria-current="page"{% endif %}>{{ icon('armchair') }} Merk &amp; tipe</a>
+        <a class="nav-link {% if current_path == '/tentang-data' %}is-active{% endif %}" href="/tentang-data" {% if current_path == '/tentang-data' %}aria-current="page"{% endif %}>{{ icon('shield-check') }} Tentang data</a>
+        {% if current_user and current_user.can_input %}
+          <a class="nav-link {% if current_path.startswith('/internal') %}is-active{% endif %}" href="/internal" {% if current_path.startswith('/internal') %}aria-current="page"{% endif %}>{{ icon('plus') }} Input data</a>
+        {% endif %}
+        {% if current_user and current_user.is_admin %}
+          <a class="nav-link {% if current_path.startswith('/admin') %}is-active{% endif %}" href="/admin" {% if current_path.startswith('/admin') %}aria-current="page"{% endif %}>{{ icon('settings-2') }} Admin</a>
+        {% endif %}
+        {% if current_user %}
+          <a class="nav-link {% if current_path.startswith('/akun') %}is-active{% endif %}" href="/akun/rating-saya" {% if current_path.startswith('/akun') %}aria-current="page"{% endif %}>{{ icon('star') }} Rating saya</a>
+          <form method="post" action="/keluar" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="nav-button" type="submit">Keluar</button>
+          </form>
+        {% else %}
+          <a class="nav-link {% if current_path == '/masuk' %}is-active{% endif %}" href="/masuk">{{ icon('log-in') }} Masuk</a>
+          <a class="button small primary nav-cta" href="/daftar">Daftar</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+
+  <div class="social-layout app-layout">
+    <aside class="social-sidebar" aria-label="Navigasi utama">
+      <a class="social-brand" href="/" aria-label="Beranda Kursi Pijat Finder"><span class="social-brand-mark">{{ icon('armchair') }}</span><span>kursipijat<span class="brand-accent">.</span><small>FINDER JAKARTA</small></span></a>
+      <nav class="social-nav" aria-label="Menu utama">
+        <a class="social-nav-link {% if current_path == '/' %}is-current{% endif %}" href="/" {% if current_path == '/' %}aria-current="page"{% endif %}>{{ icon('home') }} <span>Beranda</span></a>
+        <a class="social-nav-link" href="/#cari">{{ icon('search') }} <span>Cari lokasi</span></a>
+        <a class="social-nav-link" href="/#explorer">{{ icon('map-pin') }} <span>Jelajahi peta</span></a>
+        <a class="social-nav-link {% if current_path.startswith('/merk') %}is-current{% endif %}" href="/merk" {% if current_path.startswith('/merk') %}aria-current="page"{% endif %}>{{ icon('armchair') }} <span>Merk &amp; tipe</span></a>
+        <a class="social-nav-link {% if current_path == '/tentang-data' %}is-current{% endif %}" href="/tentang-data" {% if current_path == '/tentang-data' %}aria-current="page"{% endif %}>{{ icon('shield-check') }} <span>Tentang data</span></a>
+        {% if current_user and current_user.can_input %}<a class="social-nav-link {% if current_path.startswith('/internal') %}is-current{% endif %}" href="/internal" {% if current_path.startswith('/internal') %}aria-current="page"{% endif %}>{{ icon('plus') }} <span>Input data</span></a>{% endif %}
+        {% if current_user and current_user.is_admin %}<a class="social-nav-link {% if current_path.startswith('/admin') %}is-current{% endif %}" href="/admin" {% if current_path.startswith('/admin') %}aria-current="page"{% endif %}>{{ icon('settings-2') }} <span>Admin</span></a>{% endif %}
+        {% if current_user %}<a class="social-nav-link {% if current_path.startswith('/akun') %}is-current{% endif %}" href="/akun/rating-saya" {% if current_path.startswith('/akun') %}aria-current="page"{% endif %}>{{ icon('star') }} <span>Rating saya</span></a>{% endif %}
+      </nav>
+      <div class="social-account">
+        {% if current_user %}<form method="post" action="/keluar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="social-nav-link" type="submit">{{ icon('log-in') }} <span>Keluar</span></button></form>
+        {% else %}<a class="social-nav-link {% if current_path == '/masuk' %}is-current{% endif %}" href="/masuk" {% if current_path == '/masuk' %}aria-current="page"{% endif %}>{{ icon('user-round') }} <span>Masuk</span></a><a class="social-register" href="/daftar" {% if current_path == '/daftar' %}aria-current="page"{% endif %}>Buat akun</a>{% endif %}
+        <small>Data contoh · Versi lokal</small>
+      </div>
+    </aside>
+    <main id="main-content" class="social-content" tabindex="-1">
+      {% if flash %}
+        <div class="flash" role="status">
+          {{ icon('check') }}
+          <span>{{ flash }}</span>
+          <button class="flash-close" type="button" data-dismiss-flash aria-label="Tutup pemberitahuan">{{ icon('x') }}</button>
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div>
+        <strong>Kursi Pijat Finder</strong>
+        <p>Status menunjukkan kursi masih ada berdasarkan pemeriksaan terakhir, bukan kursi sedang kosong.</p>
+      </div>
+      <nav aria-label="Navigasi footer">
+        <a href="/">Peta</a>
+        <a href="/merk">Merk &amp; tipe</a>
+        <a href="/tentang-data">Tentang data</a>
+      </nav>
+      <p class="footer-note">Dibuat untuk membantu pencarian kursi pijat di Jakarta.</p>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', path='js/app.js') }}?v=20261104-2" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

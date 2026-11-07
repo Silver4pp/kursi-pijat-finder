@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Ubah Fitur {{ chair_type.name }}{% endblock %}
+{% block content %}
+<section class="page-head narrow"><a class="back-link" href="/admin/master-tipe">Semua tipe</a><h1>{{ chair_type.brand.name }} · {{ chair_type.name }}</h1><p>Rating hanya dibuka untuk area berstatus didukung. Area yang belum pasti tidak diandaikan tersedia.</p></section>
+<form method="post" action="/admin/master-tipe/{{ chair_type.id }}" class="form-sheet narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% for mapping in chair_type.body_areas|sort(attribute='body_area.sort_order') %}
+  <fieldset><legend>{{ mapping.body_area.label }}</legend>
+    <div class="form-grid">
+      <label><span>Status</span><select name="status_{{ mapping.id }}"><option value="didukung" {% if mapping.support_status == 'didukung' %}selected{% endif %}>Didukung</option><option value="tidak_didukung" {% if mapping.support_status == 'tidak_didukung' %}selected{% endif %}>Tidak didukung</option><option value="belum_dikonfirmasi" {% if mapping.support_status == 'belum_dikonfirmasi' %}selected{% endif %}>Belum dikonfirmasi</option></select></label>
+      <label><span>Mekanisme</span><select name="mechanism_{{ mapping.id }}"><option value="">Tidak ada atau belum tahu</option>{% for code,label in [('roller','Roller'),('kantung_udara','Kantung udara'),('roller_dan_kantung_udara','Roller dan kantung udara'),('lainnya','Lainnya')] %}<option value="{{ code }}" {% if mapping.mechanism == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      <label class="wide"><span>Dasar atau sumber</span><input name="source_{{ mapping.id }}" value="{{ mapping.source_note or '' }}"></label>
+    </div>
+  </fieldset>
+  {% endfor %}
+  <button class="button primary" type="submit">Simpan peta fitur</button>
+</form>
+{% endblock %}

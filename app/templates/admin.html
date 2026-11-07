@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">Pemeriksaan data</p>
+  <h1>Admin</h1>
+  <p><span class="num">{{ venue_count }}</span> gedung · <span class="num">{{ spot_count }}</span> titik. Periksa data dari antrean tertua.</p>
+  <a class="button secondary" href="/admin/master-tipe">{{ icon('settings-2') }} Kelola fitur tipe kursi</a>
+</section>
+
+<section class="content-section">
+  <h2>Antrean lokasi</h2>
+  {% if location_queue %}
+  <div class="table-like">
+  {% for item in location_queue %}
+    <div class="table-row">
+      <span><strong>{{ change_kind_labels.get(item.kind, item.kind) }}</strong><small>{{ item.created_at.strftime('%d-%m-%Y %H:%M') }} · {{ item.submitter.name }}</small></span>
+      <span>{% if item.target_spot %}{{ item.target_spot.venue.name }} · {{ item.target_spot.name }}{% else %}Data baru{% endif %}</span>
+      <a class="button secondary small" href="/admin/usulan/{{ item.id }}">Periksa</a>
+    </div>
+  {% endfor %}
+  </div>
+  {% else %}<p>Tidak ada usulan lokasi yang menunggu.</p>{% endif %}
+</section>
+
+<section class="content-section">
+  <h2>Antrean rating</h2>
+  {% if rating_queue %}
+  <div class="rating-queue">
+  {% for version in rating_queue %}
+    {% set rating = version.rating %}
+    <article class="queue-card">
+      <div>
+        <h3>{{ rating.placement.brand.name }} · {{ rating.placement.chair_type.name }}</h3>
+        <p>{{ rating.placement.spot.venue.name }}, lantai {{ rating.placement.spot.floor }}, {{ rating.placement.spot.name }}</p>
+        <p class="muted">Dipakai {{ version.usage_date.strftime('%d-%m-%Y') }} · {% if rating.user %}Akun {{ rating.user.name }}{% else %}Anonim{% endif %}{% if version.version_no > 1 %} · Koreksi versi {{ version.version_no }}{% endif %}</p>
+        <ul class="score-list">{% for score in version.scores %}<li>{{ score.body_area.label }}: <strong>{{ score.stars }} dari 5</strong></li>{% endfor %}</ul>
+      </div>
+      <form method="post" action="/admin/rating/{{ version.id }}/keputusan" class="decision-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label><span>Catatan pemeriksaan</span><input name="review_note" placeholder="Wajib diisi bila ditolak"></label>
+        <div class="actions">
+          <button class="button primary small" name="action" value="approve" type="submit">Setujui</button>
+          <button class="button danger small" name="action" value="reject" type="submit">Tolak</button>
+        </div>
+      </form>
+    </article>
+  {% endfor %}
+  </div>
+  {% else %}<p>Tidak ada rating yang menunggu.</p>{% endif %}
+</section>
+{% endblock %}
