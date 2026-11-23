@@ -11,10 +11,19 @@ Aplikasi web untuk mencari lokasi kursi pijat di Jakarta. Pengguna dapat melihat
 - Rating berdasarkan area pijat yang didukung oleh tipe kursi.
 - Usulan data oleh petugas dan pemeriksaan oleh admin.
 - Riwayat perubahan lokasi yang sudah disetujui.
+- Saran pencarian muncul saat mengetik (mengambil dari `/api/v1/suggest`).
+- Daftar hasil gedung dan antrean admin ditampilkan per halaman (10 item per halaman).
+- Admin dapat mengubah data gedung dari halaman detail gedung dan mengekspor titik kursi ke CSV (`/admin/export/spots.csv`).
 
 ## Teknologi
 
 Python, FastAPI, Jinja2, SQLAlchemy, SQLite, dan Leaflet. Peta menggunakan tile OpenStreetMap dan memerlukan koneksi internet.
+
+## Struktur kode
+
+`app/main.py` hanya pabrik aplikasi (lifespan, berkas statis, registrasi router). Helper web bersama (cookie, CSRF, flash, render, unggahan foto, pagination) ada di `app/web.py`; logika domain (pencarian, penerapan usulan, ringkasan rating) ada di `app/services.py`; rute terbagi per domain di `app/routes/`: `public.py`, `ratings.py`, `auth.py`, `internal.py`, dan `admin.py`.
+
+Gaya tampilan ada di satu berkas `app/static/css/theme.css`: design tokens (palet, radius, bayangan, transisi) di bagian akhir berkas, termasuk animasi antarmuka. Animasi otomatis dinonaktifkan bila pengguna mengaktifkan *reduced motion* di sistem operasinya. Versi query string pada tautan CSS di `base.html` perlu dinaikkan setiap kali berkas ini berubah.
 
 ## Menjalankan aplikasi
 
@@ -70,6 +79,30 @@ Database berada di `data/app.db` dan foto tersimpan di `data/uploads/`. Keduanya
 
 Lokasi database dapat diatur melalui variabel lingkungan `DATABASE_URL`. Path SQLite relatif dihitung dari direktori tempat perintah dijalankan. Jika variabel tidak diatur, lokasi database mengikuti folder proyek.
 
+Perubahan skema pada tabel yang sudah ada diterapkan lewat migrasi ringan yang idempoten, dicatat di tabel `schema_migrations`, dan dijalankan otomatis saat aplikasi dimulai setelah `create_all`. Foto yang diunggah dipecah ulang (re-encode) untuk membuang metadata termasuk EXIF, diperkecil bila sisi terpanjangnya melebihi 2560 piksel, dan disajikan dengan header `X-Content-Type-Options: nosniff`.
+
+## Konfigurasi
+
+Variabel lingkungan yang dikenali aplikasi:
+
+| Variabel | Bawaan | Keterangan |
+|---|---|---|
+| `DATABASE_URL` | `sqlite:///data/app.db` | Lokasi database |
+| `COOKIE_SECURE` | `0` | Set `1` di produksi agar cookie hanya dikirim lewat HTTPS |
+| `COOKIE_SAMESITE` | `lax` | Kebijakan SameSite cookie |
+| `SESSION_COOKIE_DAYS` | `14` | Umur cookie dan sesi login (hari) |
+| `RATE_LIMIT_ENABLED` | `1` | Pembatas laju per-IP untuk form masuk, daftar, dan rating |
+| `RATE_LIMIT_LOGIN` | `10` | Percobaan masuk maksimum per jendela waktu |
+| `RATE_LIMIT_REGISTER` | `5` | Pendaftaran maksimum per jendela waktu |
+| `RATE_LIMIT_RATING` | `20` | Pengiriman rating maksimum per jendela waktu |
+| `RATE_LIMIT_WINDOW_MINUTES` | `15` | Panjang jendela waktu pembatas laju (menit) |
+
+Pembatas laju disimpan di memori proses; jalankan satu proses Uvicorn atau pasang penyimpanan bersama bila menjalankan banyak worker. Sesi login kedaluwarsa dan subjek anonim yang tidak aktif lebih dari setahun dibersihkan otomatis saat aplikasi dimulai.
+
+## Pendaftaran dan kata sandi
+
+Pendaftaran akun meminta konfirmasi kata sandi dan menerima kata sandi minimal 8 karakter yang mengandung huruf dan angka. Token CSRF diperbarui setiap kali pengguna berhasil masuk. Pengguna dapat menghapus rating miliknya sendiri dari halaman rating atau “Rating saya”; penghapusan meminta konfirmasi terlebih dahulu dan dicatat di `audit_logs`.
+
 ## Pengujian
 
 Jalankan dari folder utama proyek setelah environment disiapkan:
@@ -88,7 +121,7 @@ Pengujian menggunakan database sementara dan tidak mengubah database lokal aplik
 
 ## Batasan
 
-Aplikasi ini ditujukan untuk pengujian lokal, **belum siap dibuka ke publik**. Akun contoh dibuat otomatis dengan kata sandi yang diketahui; jangan gunakan akun tersebut untuk layanan publik. Sebelum menerapkan aplikasi secara daring, hapus mekanisme akun contoh, siapkan autentikasi dan konfigurasi produksi, HTTPS dan cookie aman, pembatasan laju, pencadangan, penyimpanan foto, serta tinjau keamanan dan kebijakan penyedia tile peta.
+Aplikasi ini ditujukan untuk pengujian lokal, **belum siap dibuka ke publik**. Akun contoh dibuat otomatis dengan kata sandi yang diketahui; jangan gunakan akun tersebut untuk layanan publik. Sebelum menerapkan aplikasi secara daring, hapus mekanisme akun contoh, siapkan autentikasi dan konfigurasi produksi, HTTPS dan cookie aman (`COOKIE_SECURE=1`), pencadangan, penyimpanan foto, serta tinjau keamanan dan kebijakan penyedia tile peta. Pembatas laju berjalan di memori proses tunggal; untuk banyak worker perlu penyimpanan bersama.
 
 Formulir penggantian penempatan kursi dan impor data massal belum tersedia. Data contoh perlu diganti dengan data yang telah diperiksa sebelum digunakan sebagai informasi publik.
 

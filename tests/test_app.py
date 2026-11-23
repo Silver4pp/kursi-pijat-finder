@@ -1,22 +1,17 @@
+import json
 import os
 import re
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
-_fd, _test_db_path = tempfile.mkstemp(prefix="kpf-test-", suffix=".db")
-os.close(_fd)
-os.unlink(_test_db_path)
-os.environ["DATABASE_URL"] = f"sqlite:///{_test_db_path}"
+from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import select  # noqa: E402
-
-from app import models  # noqa: E402
-from app.db import Base, SessionLocal, engine  # noqa: E402
-from app.main import app  # noqa: E402
-from app.seed import seed_database  # noqa: E402
+from app import models, services
+from app.db import Base, SessionLocal, engine
+from app.main import app
+from app.seed import seed_database
 
 Base.metadata.create_all(bind=engine)
 with SessionLocal() as db:
@@ -96,8 +91,8 @@ def test_shared_navigation_on_public_and_admin_pages():
             page = client.get(path)
             assert page.status_code == 200
             assert 'class="social-sidebar"' in page.text
-            assert 'href="/#cari"' in page.text
-            assert 'href="/#explorer"' in page.text
+            assert 'href="/#cari"' not in page.text
+            assert 'href="/#explorer"' not in page.text
             assert 'href="/merk"' in page.text
             assert 'href="/tentang-data"' in page.text
         assert 'href="/merk" aria-current="page"' in client.get("/merk").text
@@ -107,6 +102,18 @@ def test_shared_navigation_on_public_and_admin_pages():
         assert admin_page.status_code == 200
         assert 'href="/admin" aria-current="page"' in admin_page.text
         assert 'action="/keluar"' in admin_page.text
+
+
+def test_brand_directory_keeps_rating_counts_and_links():
+    with TestClient(app) as client:
+        page = client.get("/merk")
+        assert page.status_code == 200
+        assert "type-rating-list" in page.text
+        assert "4,5" in page.text
+        assert "6 penilai" in page.text
+        assert "penilai minimum" in page.text
+        assert "/merk/merk-aruna-contoh/tipe-punggung-satu" in page.text
+        assert "5 penilai yang disetujui" in page.text
 
 
 def test_private_facility_hidden_until_direct_search_or_access_filter():
@@ -401,3 +408,807 @@ def test_rating_correction_replaces_score_without_adding_a_rater():
         page = public.get(f"/nilai/{placement_id}").text
         assert "4,6" in page
         assert "berdasarkan 7 penilai" in page
+
+
+def test_search_keeps_nearby_coordinates_when_filters_are_submitted():
+    with TestClient(app) as client:
+        page = client.get("/", params={"lat": "-6.200000", "lng": "106.820000", "q": "mall"})
+        assert page.status_code == 200
+        assert 'name="lat" value="-6.200000"' in page.text
+        assert 'name="lng" value="106.820000"' in page.text
+        assert "Diurutkan dari lokasi terdekat" in page.text
+        assert "1 aktif" in page.text
+
+
+def test_invalid_rating_and_correction_return_to_form_and_preserve_values():
+    placement_id = placement_id_by_spot("area-tunggu-utara")
+    area_id = body_area_id("punggung")
+    with TestClient(app) as client:
+        client.get(f"/nilai/{placement_id}")
+        payload = {"csrf_token": csrf(client), "usage_date": "2026-11-02"}
+        invalid = client.post(f"/nilai/{placement_id}", data=payload)
+        assert invalid.status_code == 400
+        assert "Beri bintang untuk sedikitnya satu area" in invalid.text
+        assert 'value="2026-11-02"' in invalid.text
+        assert "rating-form" in invalid.text
+        assert "application/json" not in invalid.headers["content-type"]
+
+        invalid_date = client.post(f"/nilai/{placement_id}", data={**payload, "usage_date": "2026-10-01", f"score_{area_id}": "4"})
+        assert invalid_date.status_code == 400
+        assert "sebelum penempatan ini" in invalid_date.text
+        assert re.search(rf'id="new-{area_id}-4"[^>]*checked', invalid_date.text)
+
+        submitted = client.post(f"/nilai/{placement_id}", data={**payload, f"score_{area_id}": "4"}, follow_redirects=True)
+        rating_id = re.search(r"/ratings/([^/]+)/koreksi", submitted.text).group(1)
+        correction = client.post(f"/ratings/{rating_id}/koreksi", data=payload)
+        assert correction.status_code == 400
+        assert "Beri bintang untuk sedikitnya satu area" in correction.text
+        assert 'value="2026-11-02"' in correction.text
+        assert re.search(rf'id="correct-{area_id}-0"[^>]*checked', correction.text)
+
+        rejected_csrf = client.post(f"/nilai/{placement_id}", data={**payload, "csrf_token": "wrong"})
+        assert rejected_csrf.status_code == 403
+
+
+def test_hidden_placements_cannot_receive_public_ratings():
+    placement_id = placement_id_by_spot("area-tunggu-utara")
+    with SessionLocal() as db:
+        placement = db.get(models.Placement, placement_id)
+        placement.is_published = False
+        db.commit()
+    try:
+        with TestClient(app) as client:
+            client.get("/")
+            assert client.get(f"/nilai/{placement_id}").status_code == 404
+            response = client.post(f"/nilai/{placement_id}", data={"csrf_token": csrf(client), "usage_date": "2026-11-02", f"score_{body_area_id('punggung')}": "5"})
+            assert response.status_code == 404
+    finally:
+        with SessionLocal() as db:
+            db.get(models.Placement, placement_id).is_published = True
+            db.commit()
+
+
+def test_combined_placement_filters_match_the_same_chairs():
+    with SessionLocal() as db:
+        spot = db.scalar(select(models.Spot).where(models.Spot.slug == "area-tunggu-utara"))
+        other_type = db.scalar(select(models.ChairType).where(models.ChairType.name == "Tipe Punggung dan Kaki"))
+        first_placement = spot.placements[0]
+        venue_id = spot.venue_id
+        original_brand_id = first_placement.brand_id
+        other_brand_id = other_type.brand_id
+        extra = models.Placement(spot_id=spot.id, brand_id=other_type.brand_id, chair_type_id=other_type.id,
+                                 quantity=5, payment_methods="e_money", cost_type="berbayar_per_sesi")
+        db.add(extra)
+        db.commit()
+        extra_id = extra.id
+    try:
+        with TestClient(app) as client:
+            def slugs(**params):
+                result = client.get(f"/api/v1/venues/{venue_id}/spots", params=params).json()
+                return [spot["slug"] for spot in result["spots"]]
+
+            assert "area-tunggu-utara" not in slugs(brand_id=other_brand_id, payment="qris")
+            assert "area-tunggu-utara" not in slugs(brand_id=original_brand_id, payment="qris", min_qty="4")
+            assert "area-tunggu-utara" in slugs(brand_id=other_brand_id, payment="e_money", min_qty="5")
+    finally:
+        with SessionLocal() as db:
+            db.delete(db.get(models.Placement, extra_id))
+            db.commit()
+
+
+def test_health_and_robots():
+    with TestClient(app) as client:
+        assert client.get("/health").json()["database"] == "ok"
+        robots = client.get("/robots.txt")
+        assert robots.status_code == 200
+        assert "Disallow: /admin" in robots.text
+
+
+def test_login_rate_limit_blocks_repeated_attempts(monkeypatch):
+    monkeypatch.setattr("app.config.RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr("app.web.login_limiter.max_events", 0)
+    with TestClient(app) as client:
+        client.get("/masuk")
+        blocked = client.post(
+            "/masuk",
+            data={"csrf_token": csrf(client), "email": "admin@example.com", "password": "Admin123!"},
+        )
+        assert blocked.status_code == 429
+        assert "Terlalu banyak percobaan masuk" in blocked.text
+
+
+def test_register_rejects_mismatched_or_weak_password():
+    with TestClient(app) as client:
+        client.get("/daftar")
+        base = {"csrf_token": csrf(client), "name": "Penguji Daftar", "email": "penguji@example.com"}
+        mismatch = client.post("/daftar", data={**base, "password": "Sandal99", "confirm": "Sandal98"})
+        assert mismatch.status_code == 400
+        assert "Konfirmasi kata sandi tidak sama" in mismatch.text
+
+        weak = client.post("/daftar", data={**base, "password": "sandalyangpanjang", "confirm": "sandalyangpanjang"})
+        assert weak.status_code == 400
+        assert "huruf dan angka" in weak.text
+
+        ok = client.post("/daftar", data={**base, "password": "Sandal99", "confirm": "Sandal99"}, follow_redirects=False)
+        assert ok.status_code == 303
+
+
+def test_unpublished_venue_hides_spot_detail_and_type_listing():
+    with SessionLocal() as db:
+        venue = db.scalar(select(models.Venue).where(models.Venue.slug == "mall-demo-selatan"))
+        venue.is_published = False
+        db.commit()
+    try:
+        with TestClient(app) as client:
+            assert client.get("/venue/mall-demo-selatan").status_code == 404
+            assert client.get("/venue/mall-demo-selatan/titik/dekat-eskalator-timur").status_code == 404
+            names = [v["name"] for v in client.get("/api/v1/venues").json()["venues"]]
+            assert "Mall Demo Selatan" not in names
+            type_page = client.get("/merk/merk-aruna-contoh/tipe-seluruh-badan-dua")
+            assert type_page.status_code == 200
+            assert "Mall Demo Selatan" not in type_page.text
+    finally:
+        with SessionLocal() as db:
+            venue = db.scalar(select(models.Venue).where(models.Venue.slug == "mall-demo-selatan"))
+            venue.is_published = True
+            db.commit()
+
+
+def test_create_proposal_rejects_unknown_existence_status():
+    with SessionLocal() as db:
+        venue_id = db.scalar(select(models.Venue.id).where(models.Venue.slug == "mall-demo-selatan"))
+    with TestClient(app) as petugas:
+        login(petugas, "petugas@example.com", "Petugas123!")
+        petugas.get("/internal/usulan-baru")
+        response = petugas.post(
+            "/internal/usulan-baru",
+            data={
+                "csrf_token": csrf(petugas),
+                "existing_venue_id": venue_id,
+                "venue_name": "",
+                "spot_name": "Titik uji status",
+                "floor": "1",
+                "zone_landmark": "Di dekat uji status",
+                "existence_status": "entahlah",
+            },
+        )
+        assert response.status_code == 400
+        assert "Status keberadaan tidak dikenali" in response.text
+
+
+def test_rejected_proposal_discards_staged_photo():
+    from io import BytesIO
+
+    from PIL import Image as PILImage
+
+    from app.db import UPLOAD_DIR
+
+    buffer = BytesIO()
+    PILImage.new("RGB", (4, 4), "red").save(buffer, format="PNG")
+    photo_bytes = buffer.getvalue()
+
+    with TestClient(app) as petugas:
+        login(petugas, "petugas@example.com", "Petugas123!")
+        petugas.get("/internal/usulan-baru")
+        response = petugas.post(
+            "/internal/usulan-baru",
+            data={
+                "csrf_token": csrf(petugas),
+                "existing_venue_id": "",
+                "venue_name": "Venue Uji Foto",
+                "venue_category": "lainnya",
+                "address": "Jl. Uji Foto No. 1",
+                "admin_city": "Jakarta Pusat",
+                "latitude": "-6.1900",
+                "longitude": "106.8300",
+                "spot_name": "Titik Uji Foto",
+                "floor": "1",
+                "zone_landmark": "Di dekat loket uji",
+                "photo_intended_use": "bukti_internal",
+            },
+            files={"photo": ("contoh.png", photo_bytes, "image/png")},
+            follow_redirects=True,
+        )
+        assert "menunggu pemeriksaan admin" in response.text
+
+    with SessionLocal() as db:
+        change_id = db.scalar(
+            select(models.ChangeRequest)
+            .where(models.ChangeRequest.kind == "create_location")
+            .order_by(models.ChangeRequest.created_at.desc())
+        ).id
+        staged_name = db.get(models.ChangeRequest, change_id).staged_photo_name
+        assert staged_name and (UPLOAD_DIR / staged_name).exists()
+
+    with TestClient(app) as admin:
+        login(admin, "admin@example.com", "Admin123!")
+        rejected = admin.post(
+            f"/admin/usulan/{change_id}/keputusan",
+            data={"csrf_token": csrf(admin), "action": "reject", "review_note": "Data kurang jelas."},
+            follow_redirects=True,
+        )
+        assert "ditolak" in rejected.text
+
+    with SessionLocal() as db:
+        item = db.get(models.ChangeRequest, change_id)
+        assert item.staged_photo_name is None
+        assert not (UPLOAD_DIR / staged_name).exists()
+
+
+def test_owner_can_delete_their_own_rating():
+    placement_id = placement_id_by_spot("area-makan-selatan")
+    punggung_id = body_area_id("punggung")
+    with TestClient(app) as user:
+        login(user, "user@example.com", "User123!")
+        user.get(f"/nilai/{placement_id}")
+        submitted = user.post(
+            f"/nilai/{placement_id}",
+            data={"csrf_token": csrf(user), "usage_date": "2026-11-02", f"score_{punggung_id}": "4"},
+            follow_redirects=True,
+        )
+        assert "menunggu pemeriksaan admin" in submitted.text
+        rating_id = re.search(r"/ratings/([^/]+)/hapus", submitted.text).group(1)
+
+        with SessionLocal() as db:
+            assert db.get(models.Rating, rating_id) is not None
+
+        deleted = user.post(
+            f"/ratings/{rating_id}/hapus",
+            data={"csrf_token": csrf(user)},
+            follow_redirects=True,
+        )
+        assert "Rating Anda dihapus" in deleted.text
+
+    with SessionLocal() as db:
+        assert db.get(models.Rating, rating_id) is None
+
+
+def _create_venue_with_spot(db, index: int):
+    """Seed one pagination venue/spot; safe to call from several tests."""
+    venue = db.scalar(
+        select(models.Venue).where(models.Venue.slug == f"paginasi-test-mall-{index}")
+    )
+    if venue is None:
+        venue = models.Venue(
+            name=f"Paginasi Test Mall {index}",
+            slug=f"paginasi-test-mall-{index}",
+            category="mall",
+            address="Jl. Uji Paginasi 1",
+            admin_city="Jakarta Pusat",
+            latitude=-6.2,
+            longitude=106.8,
+            is_published=True,
+        )
+        db.add(venue)
+        db.flush()
+    if (
+        db.scalar(select(models.Spot).where(models.Spot.slug == f"paginasi-spot-{index}"))
+        is None
+    ):
+        db.add(
+            models.Spot(
+                venue_id=venue.id,
+                name=f"Lantai 1 dekat pintu {index}",
+                slug=f"paginasi-spot-{index}",
+                floor="1",
+                zone_landmark="Dekat pintu utara",
+                existence_status="ada",
+                is_published=True,
+            )
+        )
+
+
+def test_home_pagination_spans_two_pages():
+    with SessionLocal() as db:
+        for i in range(11):
+            _create_venue_with_spot(db, i)
+        db.commit()
+
+    with TestClient(app) as client:
+        page1 = client.get("/").text
+        assert "class=\"pager\"" in page1
+        assert "Berikutnya" in page1
+        assert "Halaman 1 dari 2" in page1
+
+        page2 = client.get("/?page=2").text
+        assert "Sebelumnya" in page2
+        # Paginated page 2 must not repeat page-1 venues.
+        assert "Paginasi Test Mall 0" not in page2
+        assert "Paginasi Test Mall 10" in page2
+
+        # Out-of-range and non-numeric page values fall back safely.
+        assert "Sebelumnya" in client.get("/?page=99").text
+        assert "Halaman 1 dari 2" in client.get("/?page=abc").text
+
+
+def test_admin_queue_pagination():
+    with TestClient(app) as client:
+        login(client, "admin@example.com", "Admin123!")
+
+    with SessionLocal() as db:
+        admin = db.scalar(select(models.User).where(models.User.email == "admin@example.com"))
+        for i in range(11):
+            db.add(
+                models.ChangeRequest(
+                    submitter_id=admin.id,
+                    kind="create_location",
+                    payload_json="{}",
+                    status="submitted",
+                )
+            )
+        placement = db.scalar(
+            select(models.Placement)
+            .where(
+                models.Placement.is_published.is_(True),
+                models.Placement.brand_id.is_not(None),
+                models.Placement.chair_type_id.is_not(None),
+            )
+            .order_by(models.Placement.id)
+        )
+        pending = len(
+            db.scalars(
+                select(models.RatingVersion).where(models.RatingVersion.status == "pending")
+            ).all()
+        )
+        for i in range(max(0, 11 - pending)):
+            subject = models.AnonymousSubject(token_hash=f"pager-subject-{i}")
+            db.add(subject)
+            db.flush()
+            rating = models.Rating(placement_id=placement.id, anonymous_subject_id=subject.id)
+            db.add(rating)
+            db.flush()
+            db.add(
+                models.RatingVersion(
+                    rating_id=rating.id,
+                    version_no=1,
+                    usage_date=models.utcnow().date(),
+                    status="pending",
+                )
+            )
+        db.commit()
+
+    with TestClient(app) as client:
+        login(client, "admin@example.com", "Admin123!")
+        page1 = client.get("/admin").text
+        assert "Halaman 1 dari 2" in page1
+        assert "/admin?loc_page=2" in page1
+
+        page2 = client.get("/admin?loc_page=2").text
+        assert "Sebelumnya" in page2
+        assert "/admin?loc_page=1" in page2
+
+        # Moving one queue must not reset the other queue's page.
+        both = client.get("/admin?loc_page=1&rat_page=2").text
+        loc_next = re.search(r'href="([^"]*loc_page=2[^"]*)"', both)
+        assert loc_next and "rat_page=2" in loc_next.group(1)
+        rat_prev = re.search(r'href="([^"]*rat_page=1[^"]*)"', both)
+        assert rat_prev and "loc_page=1" in rat_prev.group(1)
+
+
+def test_admin_can_edit_venue_and_others_cannot():
+    with SessionLocal() as db:
+        for i in range(11):
+            _create_venue_with_spot(db, i)
+        db.commit()
+
+    with SessionLocal() as db:
+        venue = db.scalar(select(models.Venue).where(models.Venue.slug == "paginasi-test-mall-0"))
+        venue_id = venue.id
+
+    # Anonymous visitors are sent to the login page.
+    with TestClient(app) as client:
+        resp = client.get(f"/admin/venue/{venue_id}/edit", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/masuk"
+
+    # Public accounts lack the admin role.
+    with TestClient(app) as client:
+        login(client, "user@example.com", "User123!")
+        resp = client.get(f"/admin/venue/{venue_id}/edit", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/"
+
+    with TestClient(app) as client:
+        login(client, "admin@example.com", "Admin123!")
+        page = client.get(f"/admin/venue/{venue_id}/edit")
+        assert "Edit gedung" in page.text
+
+        saved = client.post(
+            f"/admin/venue/{venue_id}/edit",
+            data={
+                "csrf_token": csrf(client),
+                "name": "Paginasi Mall Renamed",
+                "category": "mall",
+                "admin_city": "Jakarta Pusat",
+                "address": "Jl. Uji Paginasi 1",
+                "district": "Tanah Abang",
+                "latitude": "-6.22",
+                "longitude": "106,81",
+                "opening_hours": "10:00-21:00",
+                "is_published": "1",
+            },
+            follow_redirects=True,
+        )
+        assert "Data gedung diperbarui" in saved.text
+
+        with SessionLocal() as db:
+            venue = db.get(models.Venue, venue_id)
+            assert venue.name == "Paginasi Mall Renamed"
+            assert venue.district == "Tanah Abang"
+            assert venue.longitude == 106.81
+            assert venue.is_published
+
+        # Invalid coordinates keep the old values and show the flash message.
+        invalid = client.post(
+            f"/admin/venue/{venue_id}/edit",
+            data={
+                "csrf_token": csrf(client),
+                "name": "Paginasi Mall Renamed",
+                "category": "mall",
+                "admin_city": "Jakarta Pusat",
+                "address": "Jl. Uji Paginasi 1",
+                "latitude": "abc",
+                "longitude": "106.81",
+            },
+            follow_redirects=True,
+        )
+        assert "harus berupa angka" in invalid.text
+
+
+def test_admin_csv_export():
+    with TestClient(app) as client:
+        resp = client.get("/admin/export/spots.csv", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/masuk"
+
+    with TestClient(app) as client:
+        login(client, "user@example.com", "User123!")
+        resp = client.get("/admin/export/spots.csv", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/"
+
+    with TestClient(app) as client:
+        login(client, "admin@example.com", "Admin123!")
+        resp = client.get("/admin/export/spots.csv")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/csv")
+        assert "attachment" in resp.headers["content-disposition"]
+        body = resp.content.decode("utf-8-sig")
+        header = body.splitlines()[0]
+        for column in ["venue_name", "spot_name", "brand", "quantity", "price_idr"]:
+            assert column in header
+        # At least one placement row beyond the header.
+        assert len(body.strip().splitlines()) > 1
+
+
+def test_suggest_api():
+    with SessionLocal() as db:
+        for i in range(11):
+            _create_venue_with_spot(db, i)
+        db.commit()
+
+    with TestClient(app) as client:
+        # Too short queries return empty buckets.
+        empty = client.get("/api/v1/suggest", params={"q": "a"})
+        assert empty.status_code == 200
+        assert empty.json() == {"venues": [], "spots": [], "brands": []}
+
+        data = client.get("/api/v1/suggest", params={"q": "Paginasi"}).json()
+        assert any(v["name"].startswith("Paginasi") for v in data["venues"])
+        assert all("slug" in v and "city" in v for v in data["venues"])
+
+        spots = client.get("/api/v1/suggest", params={"q": "pintu"}).json()
+        assert any(s["name"].startswith("Lantai 1 dekat pintu") for s in spots["spots"])
+        assert all("venue_slug" in s and "spot_slug" in s for s in spots["spots"])
+
+        # Wildcard characters in the term are matched literally.
+        wildcard = client.get("/api/v1/suggest", params={"q": "%"}).json()
+        assert wildcard["venues"] == []
+
+def test_create_location_normalises_comma_coordinates():
+    with SessionLocal() as db:
+        admin = db.scalar(select(models.User).where(models.User.email == "admin@example.com"))
+        payload = {
+            "venue": {
+                "name": "Venue Koordinat Koma",
+                "category": "mall",
+                "address": "Jl. Uji Koma 1",
+                "admin_city": "Jakarta Pusat",
+                "latitude": "-6,21",
+                "longitude": "106,83",
+            },
+            "spot": {
+                "name": "Titik Koordinat Koma",
+                "floor": "1",
+                "zone_landmark": "Dekat eskalator",
+                "existence_status": "ada",
+                "access_groups": ["umum"],
+            },
+            "placement": {},
+            "verification": {"checked_date": "2026-11-01"},
+            "photo": {},
+        }
+        change = models.ChangeRequest(
+            submitter_id=admin.id,
+            kind="create_location",
+            payload_json=json.dumps(payload),
+            status="submitted",
+        )
+        db.add(change)
+        db.commit()
+
+        spot, _ = services.apply_create_location(db, change, admin)
+        db.commit()
+
+        assert spot.venue.latitude == -6.21
+        assert spot.venue.longitude == 106.83
+        assert spot.access_codes == ["umum"]
+
+
+def test_create_location_rejects_unknown_access_groups():
+    with SessionLocal() as db:
+        admin = db.scalar(select(models.User).where(models.User.email == "admin@example.com"))
+        payload = {
+            "venue": {
+                "name": "Venue Kode Akses Palsu",
+                "category": "mall",
+                "address": "Jl. Uji Kode 1",
+                "admin_city": "Jakarta Pusat",
+                "latitude": "-6.2",
+                "longitude": "106.8",
+            },
+            "spot": {
+                "name": "Titik Kode Akses Palsu",
+                "floor": "1",
+                "zone_landmark": "Dekat pintu",
+                "existence_status": "ada",
+                "access_groups": ["kode_palsu"],
+            },
+            "placement": {},
+            "verification": {"checked_date": "2026-11-01"},
+            "photo": {},
+        }
+        change = models.ChangeRequest(
+            submitter_id=admin.id,
+            kind="create_location",
+            payload_json=json.dumps(payload),
+            status="submitted",
+        )
+        db.add(change)
+        db.commit()
+
+        try:
+            services.apply_create_location(db, change, admin)
+        except ValueError as exc:
+            db.rollback()
+            assert "Kelompok akses tidak dikenali" in str(exc)
+        else:
+            raise AssertionError("unknown access groups must be rejected")
+
+
+def test_type_rating_summary_ignores_placements_in_hidden_venues():
+    with SessionLocal() as db:
+        chair_type = db.scalar(
+            select(models.ChairType).where(models.ChairType.slug == "tipe-punggung-satu")
+        )
+        area = db.scalar(select(models.BodyArea).where(models.BodyArea.code == "punggung"))
+        before = {
+            row["area"].code: row["summary"]["count"]
+            for row in services.rating_summary_for_type(db, chair_type)
+        }
+
+        venue = models.Venue(
+            name="Venue Tersembunyi Rating",
+            slug="venue-tersembunyi-rating",
+            category="mall",
+            address="Jl. Tersembunyi",
+            admin_city="Jakarta Pusat",
+            latitude=-6.21,
+            longitude=106.82,
+            is_published=False,
+        )
+        db.add(venue)
+        db.flush()
+        spot = models.Spot(
+            venue_id=venue.id,
+            name="Titik Tersembunyi",
+            slug="titik-tersembunyi-rating",
+            floor="2",
+            zone_landmark="x",
+            existence_status="ada",
+            is_published=True,
+        )
+        db.add(spot)
+        db.flush()
+        placement = models.Placement(
+            spot_id=spot.id,
+            brand_id=chair_type.brand_id,
+            chair_type_id=chair_type.id,
+            is_published=True,
+            effective_from=models.utcnow().date(),
+            cost_type="berbayar_per_sesi",
+        )
+        db.add(placement)
+        db.flush()
+        subject = models.AnonymousSubject(token_hash="hidden-summary-subject")
+        db.add(subject)
+        db.flush()
+        rating = models.Rating(placement_id=placement.id, anonymous_subject_id=subject.id)
+        db.add(rating)
+        db.flush()
+        version = models.RatingVersion(
+            rating_id=rating.id,
+            version_no=1,
+            usage_date=models.utcnow().date(),
+            status="approved",
+        )
+        db.add(version)
+        db.flush()
+        rating.active_version_id = version.id
+        db.add(
+            models.RatingAreaScore(
+                rating_version_id=version.id, body_area_id=area.id, stars=5
+            )
+        )
+        db.commit()
+
+        after = {
+            row["area"].code: row["summary"]["count"]
+            for row in services.rating_summary_for_type(db, chair_type)
+        }
+        assert after == before
+
+
+def test_venue_spots_api_hides_unpublished_venue():
+    with SessionLocal() as db:
+        venue = db.scalar(
+            select(models.Venue).where(models.Venue.slug == "venue-tersembunyi-api")
+        )
+        if venue is None:
+            venue = models.Venue(
+                name="Venue Tersembunyi API",
+                slug="venue-tersembunyi-api",
+                category="mall",
+                address="Jl. Tersembunyi API",
+                admin_city="Jakarta Pusat",
+                latitude=-6.2,
+                longitude=106.8,
+                is_published=False,
+            )
+            db.add(venue)
+            db.commit()
+        venue_id = venue.id
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/v1/venues/{venue_id}/spots")
+        assert response.status_code == 404
+
+
+def test_delete_rating_requires_csrf_token():
+    with SessionLocal() as db:
+        user = db.scalar(select(models.User).where(models.User.email == "user@example.com"))
+        rated = set(
+            db.scalars(
+                select(models.Rating.placement_id).where(models.Rating.user_id == user.id)
+            ).all()
+        )
+        placement = next(
+            p
+            for p in db.scalars(
+                select(models.Placement).where(models.Placement.is_published.is_(True))
+            ).all()
+            if p.id not in rated
+        )
+        rating = models.Rating(placement_id=placement.id, user_id=user.id)
+        db.add(rating)
+        db.commit()
+        rating_id = rating.id
+
+    with TestClient(app) as client:
+        login(client, "user@example.com", "User123!")
+
+        rejected = client.post(f"/ratings/{rating_id}/hapus", data={}, follow_redirects=False)
+        assert rejected.status_code == 403
+        with SessionLocal() as db:
+            assert db.get(models.Rating, rating_id) is not None
+
+        deleted = client.post(
+            f"/ratings/{rating_id}/hapus",
+            data={"csrf_token": csrf(client)},
+            follow_redirects=False,
+        )
+        assert deleted.status_code == 303
+        with SessionLocal() as db:
+            assert db.get(models.Rating, rating_id) is None
+
+
+def test_csv_export_neutralises_formula_cells():
+    with SessionLocal() as db:
+        brand = db.scalar(select(models.Brand))
+        chair_type = db.scalar(select(models.ChairType))
+        venue = models.Venue(
+            name='=HYPERLINK("http://example.invalid/x","klik")',
+            slug="csv-formula-venue",
+            category="mall",
+            address="Jl. Uji CSV",
+            admin_city="Jakarta Pusat",
+            latitude=-6.2,
+            longitude=106.8,
+            is_published=False,
+        )
+        db.add(venue)
+        db.flush()
+        spot = models.Spot(
+            venue_id=venue.id,
+            name="+1+1",
+            slug="csv-formula-spot",
+            floor="1",
+            zone_landmark="x",
+            existence_status="ada",
+            is_published=True,
+        )
+        db.add(spot)
+        db.flush()
+        db.add(
+            models.Placement(
+                spot_id=spot.id,
+                brand_id=brand.id,
+                chair_type_id=chair_type.id,
+                is_published=True,
+                effective_from=models.utcnow().date(),
+                cost_type="berbayar_per_sesi",
+                quantity=2,
+            )
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        login(client, "admin@example.com", "Admin123!")
+        body = client.get("/admin/export/spots.csv").content.decode("utf-8-sig")
+
+    formula_rows = [line for line in body.splitlines() if "HYPERLINK" in line]
+    prefix = '"' + "'" + "=HYPERLINK"
+    assert formula_rows and formula_rows[0].startswith(prefix)
+    assert any("'+1+1" in line for line in body.splitlines())
+
+
+def test_forwarded_header_is_ignored_unless_peer_is_trusted(monkeypatch):
+    from starlette.requests import Request
+
+    from app import web
+
+    def make_request(host: str, forwarded: str) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "http_version": "1.1",
+                "method": "GET",
+                "scheme": "http",
+                "path": "/",
+                "raw_path": b"/",
+                "query_string": b"",
+                "headers": [(b"x-forwarded-for", forwarded.encode())],
+                "client": (host, 12345),
+                "server": ("testserver", 80),
+            }
+        )
+
+    monkeypatch.setattr(web, "TRUSTED_PROXIES", set())
+    request = make_request("198.51.100.9", "203.0.113.1, 203.0.113.2")
+    assert web.client_ip(request) == "198.51.100.9"
+
+    monkeypatch.setattr(web, "TRUSTED_PROXIES", {"198.51.100.9"})
+    assert web.client_ip(request) == "203.0.113.1"
+
+
+def test_home_pagination_handles_zero_and_negative_pages():
+    with SessionLocal() as db:
+        for i in range(11):
+            _create_venue_with_spot(db, i)
+        db.commit()
+
+    with TestClient(app) as client:
+        for page in ("0", "-1"):
+            response = client.get("/", params={"page": page})
+            assert response.status_code == 200
+            assert "Halaman 1 dari" in response.text

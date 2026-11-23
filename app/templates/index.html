@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, pager_nav %}
 {% block title %}Cari Kursi Pijat di Jakarta{% endblock %}
 {% block content %}
 {% set ns = namespace(active_filters=0, has_search=false) %}
-{% for key in ['city', 'category', 'brand_id', 'access', 'payment', 'min_qty', 'include_unknown_qty', 'lat', 'lng'] %}
+{% for key in ['city', 'category', 'brand_id', 'access', 'payment', 'min_qty', 'include_unknown_qty'] %}
   {% if params.get(key) %}{% set ns.active_filters = ns.active_filters + 1 %}{% endif %}
 {% endfor %}
+{% if params.get('lat') and params.get('lng') %}{% set ns.active_filters = ns.active_filters + 1 %}{% endif %}
 {% if params.get('q') or ns.active_filters %}{% set ns.has_search = true %}{% endif %}
 
 <section class="hero home-hero" id="cari">
@@ -16,6 +17,10 @@
   </div>
 
   <form class="search-panel" method="get" action="/" aria-label="Pencarian kursi pijat">
+    {% if params.get('lat') and params.get('lng') %}
+    <input type="hidden" name="lat" value="{{ params.get('lat') }}">
+    <input type="hidden" name="lng" value="{{ params.get('lng') }}">
+    {% endif %}
     <div class="search-panel-head">
       <div><p class="panel-eyebrow">MULAI PENCARIAN</p><h2>Cari berdasarkan lokasi atau merk</h2></div>
     </div>
@@ -25,8 +30,9 @@
         <span class="sr-only">Cari gedung, daerah, merk, atau tipe</span>
         <span class="input-with-icon">
           {{ icon('search') }}
-          <input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Cari stasiun, mall, daerah, merk…" autocomplete="off">
+          <input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Cari stasiun, mall, daerah, merk…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="suggest-box" aria-autocomplete="list">
         </span>
+        <div id="suggest-box" class="suggest-box" role="listbox" aria-label="Saran pencarian" hidden></div>
       </label>
       <button class="button primary search-submit" type="submit">{{ icon('search') }} Cari</button>
     </div>
@@ -61,6 +67,11 @@
 
     <div class="actions search-actions">
       <button class="button secondary near-button" type="button" id="near-me">{{ icon('navigation') }} <span data-near-label>Terdekat dari saya</span></button>
+      {% if params.get('lat') and params.get('lng') %}
+        {% set keep_query = [] %}
+        {% for key, value in params.items() %}{% if key not in ['lat', 'lng'] %}{% set _ = keep_query.append(key ~ '=' ~ (value|urlencode)) %}{% endif %}{% endfor %}
+        <a class="button ghost" href="/{% if keep_query %}?{{ keep_query|join('&') }}{% endif %}">Hapus lokasi saya</a>
+      {% endif %}
       {% if ns.has_search %}<a class="button ghost" href="/">Reset pencarian</a>{% endif %}
     </div>
     <p id="search-status" class="form-status" aria-live="polite"></p>
@@ -71,7 +82,7 @@
   <div class="explorer-toolbar">
     <div class="explorer-summary">
       <p class="eyebrow">HASIL PENCARIAN</p>
-      <h2>Jelajahi lokasi <span class="result-total">{{ venue_items|length }} gedung · {{ spots|length }} titik</span></h2>
+      <h2>Jelajahi lokasi <span class="result-total">{{ pager.total }} gedung · {{ spots|length }} titik</span></h2>
       <p>{% if params.get('lat') and params.get('lng') %}Diurutkan dari lokasi terdekat.{% else %}Pilih gedung untuk melihat semua titik di dalamnya.{% endif %}</p>
     </div>
 
@@ -85,7 +96,7 @@
     <div class="map-wrap" data-pane="map">
       <div class="map-legend">
         <span class="legend-pin" aria-hidden="true"></span>
-        <span><strong>Pin: titik kursi</strong><small>Lingkaran: jumlah gedung</small></span>
+        <span><strong>Pin: gedung · angka: jumlah titik</strong><small>Lingkaran: jumlah gedung</small></span>
       </div>
       <div id="map" class="map" aria-label="Peta lokasi kursi pijat"></div>
       <div id="map-loading" class="map-loading" role="status"><span class="spinner" aria-hidden="true"></span> Memuat pin gedung…</div>
@@ -111,7 +122,7 @@
           <h2>Lokasi ditemukan</h2>
           <p>Pilih lokasi untuk melihat detailnya.</p>
         </div>
-        <span class="results-count">{{ venue_items|length }} lokasi</span>
+        <span class="results-count">{{ pager.total }} lokasi</span>
       </div>
       <p class="results-note">{{ icon('shield-check') }} Status menunjukkan keberadaan terakhir yang terkonfirmasi, bukan kursi yang sedang kosong.</p>
 
@@ -150,6 +161,7 @@
           </article>
         {% endfor %}
         </div>
+        {{ pager_nav(pager, pager_prefix, 'gedung') }}
       {% else %}
         <div class="empty-state">
           {{ icon('armchair', 'large-icon') }}
@@ -165,5 +177,5 @@
 {% block scripts %}
 <script src="{{ url_for('static', path='vendor/Leaflet/leaflet.js') }}"></script>
 <script src="{{ url_for('static', path='vendor/Leaflet.markercluster/leaflet.markercluster.js') }}"></script>
-<script src="{{ url_for('static', path='js/map.js') }}?v=20261108-4"></script>
+<script src="{{ url_for('static', path='js/map.js') }}?v=20261122-2"></script>
 {% endblock %}

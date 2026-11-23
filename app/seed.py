@@ -1,3 +1,4 @@
+import os
 from datetime import date
 
 from sqlalchemy import select
@@ -33,6 +34,11 @@ ACCESS_GROUPS = [
 def seed_database(db: Session):
     if db.scalar(select(models.User)) is not None:
         return
+    if os.getenv("APP_ENV") == "production" and os.getenv("SEED_DEMO_ACCOUNTS") != "1":
+        raise RuntimeError(
+            "Refusing to seed demo accounts with known passwords in production. "
+            "Create the first admin manually, or set SEED_DEMO_ACCOUNTS=1 to accept the risk."
+        )
 
     areas = {}
     for number, (code, label) in enumerate(BODY_AREAS, start=1):

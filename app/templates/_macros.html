@@ -1,5 +1,15 @@
 {% macro icon(name, cls='') -%}
-<span class="icon {{ cls }}" style="--icon: url('/static/icons/{{ name }}.svg')" aria-hidden="true"></span>
+<span class="icon icon-{{ name }}{% if cls %} {{ cls }}{% endif %}" aria-hidden="true"></span>
+{%- endmacro %}
+
+{% macro pager_nav(pager, prefix, label='item') -%}
+{% if pager.pages > 1 %}
+<nav class="pager" aria-label="Navigasi halaman">
+  <span class="pager-info">Halaman {{ pager.page }} dari {{ pager.pages }} · {{ pager.total }} {{ label }}</span>
+  {% if pager.page > 1 %}<a class="button ghost small" href="{{ prefix }}{{ pager.page - 1 }}" rel="prev">← Sebelumnya</a>{% endif %}
+  {% if pager.page < pager.pages %}<a class="button ghost small" href="{{ prefix }}{{ pager.page + 1 }}" rel="next">Berikutnya →</a>{% endif %}
+</nav>
+{% endif %}
 {%- endmacro %}
 
 {% macro stars_input(area_id, field_prefix, current=0) -%}

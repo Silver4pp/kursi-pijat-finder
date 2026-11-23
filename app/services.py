@@ -3,10 +3,11 @@ import math
 import re
 import unicodedata
 from collections import defaultdict
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from . import models
 
@@ -97,6 +98,36 @@ def audit(db: Session, actor_id, entity_type, entity_id, action, details=None):
     )
 
 
+def purge_expired_auth_records(db: Session) -> int:
+    """Delete expired login sessions and anonymous subjects idle for a year.
+
+    Anonymous subjects that still own ratings are kept so moderation history
+    stays intact. Returns the number of removed records.
+    """
+    now = datetime.now(timezone.utc)
+    removed = 0
+
+    for session in db.scalars(select(models.Session)).all():
+        expires = session.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires < now:
+            db.delete(session)
+            removed += 1
+
+    cutoff = now - timedelta(days=365)
+    for subject in db.scalars(select(models.AnonymousSubject)).all():
+        last_seen = subject.last_seen_at
+        if last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        if last_seen < cutoff and not subject.ratings:
+            db.delete(subject)
+            removed += 1
+
+    db.commit()
+    return removed
+
+
 def _approved_scores(db: Session, placements):
     placement_ids = [p.id for p in placements]
     if not placement_ids:
@@ -141,16 +172,31 @@ def summarize_scores(rows):
     return result
 
 
+def _public_type_placements(db: Session, chair_type_id) -> list[models.Placement]:
+    """Placements of one chair type that public pages are allowed to show."""
+    return list(
+        db.scalars(
+            select(models.Placement)
+            .join(models.Spot)
+            .join(models.Venue)
+            .where(
+                models.Placement.chair_type_id == chair_type_id,
+                models.Placement.is_published.is_(True),
+                models.Placement.effective_to.is_(None),
+                models.Spot.is_published.is_(True),
+                models.Spot.existence_status == "ada",
+                models.Venue.is_published.is_(True),
+            )
+        ).all()
+    )
+
+
 def rating_summary_for_placement(db: Session, placement: models.Placement):
     """Return per-area location and same-type summaries following the 5-rater rule."""
     if not placement.chair_type:
         return []
     local = summarize_scores(_approved_scores(db, [placement]))
-    type_placements = list(
-        db.scalars(
-            select(models.Placement).where(models.Placement.chair_type_id == placement.chair_type_id)
-        ).all()
-    )
+    type_placements = _public_type_placements(db, placement.chair_type_id)
     global_summary = summarize_scores(_approved_scores(db, type_placements))
     all_areas = {
         mapping.body_area_id: mapping
@@ -180,9 +226,7 @@ def rating_summary_for_placement(db: Session, placement: models.Placement):
 
 
 def rating_summary_for_type(db: Session, chair_type: models.ChairType):
-    placements = list(
-        db.scalars(select(models.Placement).where(models.Placement.chair_type_id == chair_type.id)).all()
-    )
+    placements = _public_type_placements(db, chair_type.id)
     summary = summarize_scores(_approved_scores(db, placements))
     empty = {"count": 0, "average": None, "account_count": 0, "anonymous_count": 0}
     output = []
@@ -199,6 +243,25 @@ def rating_summary_for_type(db: Session, chair_type: models.ChairType):
             }
         )
     return output
+
+
+def _coordinate(value, field: str) -> float:
+    """Parse a coordinate that may use a decimal comma."""
+    try:
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Koordinat {field} tidak valid") from exc
+
+
+def _resolve_access_groups(db: Session, codes) -> list[models.AccessGroup]:
+    """Map access codes to groups and reject codes that no longer exist."""
+    wanted = [str(code) for code in codes if code]
+    groups = list(
+        db.scalars(select(models.AccessGroup).where(models.AccessGroup.code.in_(wanted))).all()
+    )
+    if not groups:
+        raise ValueError("Kelompok akses tidak dikenali: " + ", ".join(wanted))
+    return groups
 
 
 def get_or_create_named(db: Session, model, name, **extra):
@@ -231,8 +294,8 @@ def apply_create_location(db: Session, change_request: models.ChangeRequest, adm
             address=venue_data["address"],
             admin_city=venue_data["admin_city"],
             district=venue_data.get("district") or None,
-            latitude=float(venue_data["latitude"]),
-            longitude=float(venue_data["longitude"]),
+            latitude=_coordinate(venue_data["latitude"], "lintang"),
+            longitude=_coordinate(venue_data["longitude"], "bujur"),
             opening_hours=venue_data.get("opening_hours") or None,
             is_published=True,
         )
@@ -255,9 +318,7 @@ def apply_create_location(db: Session, change_request: models.ChangeRequest, adm
         verification_method=payload.get("verification", {}).get("check_method"),
     )
     access_codes = spot_data.get("access_groups") or ["umum"]
-    spot.access_groups = list(
-        db.scalars(select(models.AccessGroup).where(models.AccessGroup.code.in_(access_codes))).all()
-    )
+    spot.access_groups = _resolve_access_groups(db, access_codes)
     db.add(spot)
     db.flush()
 
@@ -377,9 +438,7 @@ def apply_spot_update(db: Session, change_request: models.ChangeRequest, admin: 
             setattr(spot, field, changes[field] or (None if field not in {"floor", "zone_landmark", "existence_status"} else getattr(spot, field)))
     if "access_groups" in changes:
         codes = changes["access_groups"] or ["umum"]
-        spot.access_groups = list(
-            db.scalars(select(models.AccessGroup).where(models.AccessGroup.code.in_(codes))).all()
-        )
+        spot.access_groups = _resolve_access_groups(db, codes)
     if payload.get("checked_date"):
         spot.last_verified_at = parse_date(payload["checked_date"])
     if payload.get("check_method"):
@@ -436,3 +495,143 @@ def apply_spot_update(db: Session, change_request: models.ChangeRequest, admin: 
         {"change_request_id": change_request.id, "change_kind": change_kind, "before": old, "after": changes},
     )
     return spot
+
+
+def active_placements(spot: models.Spot):
+    return [p for p in spot.placements if p.is_published and p.effective_to is None]
+
+
+def serialize_placement(placement: models.Placement):
+    return {
+        "id": placement.id,
+        "brand": placement.brand.name if placement.brand else "Merk belum terkonfirmasi",
+        "type": placement.chair_type.name if placement.chair_type else "Tipe belum terkonfirmasi",
+        "operator": placement.operator.name if placement.operator else None,
+        "quantity": placement.quantity,
+        "price": format_rupiah(placement.price_idr),
+        "duration": placement.duration_minutes,
+        "payments": [PAYMENT_LABELS.get(x, x) for x in placement.payment_codes],
+        "can_rate": placement.can_rate,
+        "cost_label": COST_LABELS.get(placement.cost_type, placement.cost_type),
+    }
+
+
+def serialize_spot(spot: models.Spot):
+    return {
+        "id": spot.id,
+        "name": spot.name,
+        "slug": spot.slug,
+        "venue_slug": spot.venue.slug,
+        "floor": spot.floor,
+        "landmark": spot.zone_landmark,
+        "status": spot.existence_status,
+        "status_label": "Masih Ada" if spot.existence_status == "ada" else "Sudah Tidak Ada",
+        "access": spot.access_labels,
+        "last_verified": spot.last_verified_at.isoformat() if spot.last_verified_at else None,
+        "placements": [serialize_placement(p) for p in active_placements(spot)],
+    }
+
+
+@dataclass
+class SearchResult:
+    spots: list[models.Spot]
+    distances: dict[str, float] = field(default_factory=dict)
+    hidden_unknown_qty: int = 0
+
+    def distance_for(self, spot: models.Spot):
+        return self.distances.get(spot.venue_id)
+
+
+def filter_spots(db: Session, params: dict) -> SearchResult:
+    # City, category, and existence filters run in SQL; the remaining filters
+    # operate on placement payloads and stay in Python for exact semantics.
+    stmt = (
+        select(models.Spot)
+        .join(models.Venue)
+        .where(
+            models.Spot.is_published.is_(True),
+            models.Venue.is_published.is_(True),
+            models.Spot.existence_status == "ada",
+        )
+        .options(
+            selectinload(models.Spot.venue),
+            selectinload(models.Spot.placements),
+            selectinload(models.Spot.access_groups),
+        )
+    )
+    if params.get("city"):
+        stmt = stmt.where(models.Venue.admin_city == params["city"])
+    if params.get("category"):
+        stmt = stmt.where(models.Venue.category == params["category"])
+    spots = list(db.scalars(stmt).unique().all())
+
+    q = (params.get("q") or "").strip().lower()
+    access_filter = params.get("access") or ""
+    include_unknown_qty = params.get("include_unknown_qty") in {"1", "on", "true", True}
+    min_qty_raw = params.get("min_qty")
+    try:
+        min_qty = int(min_qty_raw) if min_qty_raw not in (None, "") else None
+    except ValueError:
+        min_qty = None
+
+    matched = []
+    hidden_unknown_qty = 0
+    for spot in spots:
+        placements = active_placements(spot)
+        searchable = " ".join(
+            filter(
+                None,
+                [
+                    spot.venue.name,
+                    spot.venue.address,
+                    spot.venue.admin_city,
+                    spot.venue.district or "",
+                    spot.name,
+                    spot.floor,
+                    spot.zone_landmark,
+                    " ".join((p.brand.name if p.brand else "") for p in placements),
+                    " ".join((p.chair_type.name if p.chair_type else "") for p in placements),
+                    " ".join((p.operator.name if p.operator else "") for p in placements),
+                ],
+            )
+        ).lower()
+        if q and q not in searchable:
+            continue
+        matching_placements = [
+            p for p in placements
+            if (not params.get("brand_id") or p.brand_id == params["brand_id"])
+            and (not params.get("payment") or params["payment"] in p.payment_codes)
+        ]
+        if (params.get("brand_id") or params.get("payment")) and not matching_placements:
+            continue
+        if access_filter and access_filter not in spot.access_codes:
+            continue
+        searched_venue_directly = bool(q and q in spot.venue.name.lower())
+        if spot.is_private_only and not access_filter and not searched_venue_directly:
+            continue
+        if min_qty is not None:
+            known = [p.quantity for p in matching_placements if p.quantity is not None]
+            if known and sum(known) >= min_qty:
+                pass
+            elif not known and include_unknown_qty:
+                pass
+            else:
+                if not known:
+                    hidden_unknown_qty += 1
+                continue
+        matched.append(spot)
+
+    lat = params.get("lat")
+    lng = params.get("lng")
+    distances = {}
+    if lat not in (None, "") and lng not in (None, ""):
+        try:
+            user_lat, user_lng = float(lat), float(lng)
+            for spot in matched:
+                distances[spot.venue_id] = haversine_km(
+                    user_lat, user_lng, spot.venue.latitude, spot.venue.longitude
+                )
+            matched.sort(key=lambda s: distances.get(s.venue_id, 9999))
+        except ValueError:
+            distances = {}
+    return SearchResult(spots=matched, distances=distances, hidden_unknown_qty=hidden_unknown_qty)
