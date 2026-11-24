@@ -39,7 +39,7 @@ Buka terminal di folder utama proyek, yaitu folder yang berisi `requirements.txt
 $venv = Join-Path $env:USERPROFILE '.virtualenvs\kursi-pijat-finder'
 py -3.15 -m venv $venv
 & "$venv\Scripts\python.exe" -m pip install -r requirements.txt
-& "$venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+& "$venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
 **macOS atau Linux (Python 3.15)**
@@ -48,7 +48,7 @@ py -3.15 -m venv $venv
 VENV_DIR="$HOME/.virtualenvs/kursi-pijat-finder"
 python3.15 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/python" -m pip install -r requirements.txt
-"$VENV_DIR/bin/python" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+"$VENV_DIR/bin/python" -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
 Untuk menjalankan ulang, buka terminal di folder proyek dan gunakan kembali perintah Uvicorn di atas. Di terminal baru, tentukan kembali variabel `$venv` atau `VENV_DIR`.
@@ -59,7 +59,7 @@ Sebagai alternatif, `app/main.py` juga bisa dijalankan langsung dengan Python da
 & "$venv\Scripts\python.exe" .\app\main.py
 ```
 
-Cara langsung menjalankan server tanpa `--reload`. Buka `http://127.0.0.1:8000`. Database dan data contoh dibuat otomatis saat aplikasi pertama kali dijalankan.
+Cara langsung menjalankan server tanpa `--reload`. Buka `http://127.0.0.1:8001`. Database dan data contoh dibuat otomatis saat aplikasi pertama kali dijalankan.
 
 ## Akun lokal
 
