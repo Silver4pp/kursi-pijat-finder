@@ -131,7 +131,7 @@
         {% for item in venue_items %}
           {% set venue = item.venue %}
           <article class="venue-card" data-venue-card="{{ venue.id }}">
-            <button class="venue-card-main" type="button" data-venue-id="{{ venue.id }}" data-name="{{ venue.name }}" data-lat="{{ venue.latitude }}" data-lng="{{ venue.longitude }}" aria-controls="venue-panel" aria-pressed="false" aria-label="Tampilkan titik di {{ venue.name }} pada peta">
+            <button class="venue-card-main" type="button" data-venue-id="{{ venue.id }}" data-name="{{ venue.name }}" data-lat="{{ venue.latitude }}" data-lng="{{ venue.longitude }}" aria-controls="venue-panel" aria-pressed="false">
               <span class="venue-icon">{{ icon('building-2') }}</span>
               <span class="venue-text">
                 <small class="venue-kicker">{{ categories.get(venue.category, venue.category) }} · {{ venue.admin_city }}{% if venue.district %} · {{ venue.district }}{% endif %}</small>
@@ -141,22 +141,26 @@
                   {% if item.distance is not none %}<span class="distance-pill">{{ icon('navigation') }} <span class="num">{{ format_decimal(item.distance) }}</span> km</span>{% endif %}
                 </small>
               </span>
-              <span class="chev">Lihat →</span>
+              <span class="chev">Titik →</span>
+              <span class="sr-only">Tampilkan titik gedung ini pada peta.</span>
             </button>
 
-            <div class="post-meta">{{ icon('map-pin') }} <strong>{{ item.spots|length }} titik di gedung ini</strong><span class="post-spacer"></span><a href="/venue/{{ venue.slug }}">Lihat gedung →</a></div>
             <div class="spot-mini-list">
               {% for spot in item.spots %}
-                <a href="/venue/{{ venue.slug }}/titik/{{ spot.slug }}" aria-label="Buka detail {{ spot.name }} di {{ venue.name }}">
+                <a href="/venue/{{ venue.slug }}/titik/{{ spot.slug }}">
                   <span class="floor-badge">Lt. {{ spot.floor }}</span>
                   <span class="spot-mini-text">
                     <strong>{{ spot.name }}</strong>
                     <small>{{ spot.zone_landmark }}</small>
                     <small class="spot-mini-access">{{ spot.access_labels | join(', ') }}</small>
                   </span>
-                  <span class="mini-detail">Detail</span>
+                  <span class="mini-detail" aria-hidden="true">→</span>
+                  <span class="sr-only">Buka detail titik ini.</span>
                 </a>
               {% endfor %}
+            </div>
+            <div class="venue-card-footer">
+              <a href="/venue/{{ venue.slug }}">{{ item.spots|length }} titik · buka halaman gedung <span aria-hidden="true">→</span></a>
             </div>
           </article>
         {% endfor %}

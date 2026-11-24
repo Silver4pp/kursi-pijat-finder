@@ -50,6 +50,12 @@
       button.setAttribute('aria-pressed', String(show));
       button.setAttribute('aria-label', show ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi');
       button.classList.toggle('is-showing', show);
+      const showIcon = button.querySelector('.icon-show');
+      const hideIcon = button.querySelector('.icon-hide');
+      if (showIcon && hideIcon) {
+        showIcon.hidden = show;
+        hideIcon.hidden = !show;
+      }
       input.focus({ preventScroll: true });
     });
   });

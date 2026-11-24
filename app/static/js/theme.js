@@ -15,7 +15,7 @@
   const apply = (mode) => {
     const dark = mode === 'dark';
     root.dataset.theme = dark ? 'dark' : 'light';
-    if (meta) meta.setAttribute('content', dark ? '#0d1513' : '#f7fafa');
+    if (meta) meta.setAttribute('content', dark ? '#0b1211' : '#f4f7f6');
   };
 
   apply(stored() || (media.matches ? 'dark' : 'light'));

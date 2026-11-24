@@ -7,12 +7,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Kursi Pijat Finder Jakarta{% endblock %}</title>
   <meta name="description" content="Cari lokasi kursi pijat di Jakarta. Lihat lantai, akses, harga, dan ratingnya.">
-  <meta name="theme-color" content="#f7fafa">
+  <meta name="theme-color" content="#f4f7f6">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='icons/armchair.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='vendor/Leaflet/leaflet.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='vendor/Leaflet.markercluster/MarkerCluster.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='css/icons.css') }}?v=20261122-1">
-  <link rel="stylesheet" href="{{ url_for('static', path='css/theme.css') }}?v=20261122-9">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/theme.css') }}?v=20261123-5">
   <script src="{{ url_for('static', path='js/theme.js') }}?v=20261122-1"></script>
   {% block head %}{% endblock %}
 </head>
@@ -25,7 +25,7 @@
 
   <div class="social-layout app-layout">
     <header class="social-sidebar">
-      <a class="social-brand" href="/" aria-label="Beranda Kursi Pijat Finder">
+      <a class="social-brand" href="/">
         <span class="social-brand-mark">{{ icon('armchair') }}</span>
         <span>kursipijat<span class="brand-accent">.</span><small>FINDER JAKARTA</small></span>
       </a>
@@ -70,25 +70,25 @@
         </div>
       {% endif %}
       {% block content %}{% endblock %}
+
+      <footer class="site-footer">
+        <div class="site-footer-inner">
+          <div>
+            <strong>Kursi Pijat Finder</strong>
+            <p>Status menunjukkan kursi masih ada berdasarkan pemeriksaan terakhir, bukan kursi sedang kosong.</p>
+          </div>
+          <nav aria-label="Navigasi footer">
+            <a href="/">Peta</a>
+            <a href="/merk">Merk &amp; tipe</a>
+            <a href="/tentang-data">Tentang data</a>
+          </nav>
+          <p class="footer-note">Dibuat untuk membantu pencarian kursi pijat di Jakarta.</p>
+        </div>
+      </footer>
     </main>
   </div>
 
-  <footer class="site-footer">
-    <div class="site-footer-inner">
-      <div>
-        <strong>Kursi Pijat Finder</strong>
-        <p>Status menunjukkan kursi masih ada berdasarkan pemeriksaan terakhir, bukan kursi sedang kosong.</p>
-      </div>
-      <nav aria-label="Navigasi footer">
-        <a href="/">Peta</a>
-        <a href="/merk">Merk &amp; tipe</a>
-        <a href="/tentang-data">Tentang data</a>
-      </nav>
-      <p class="footer-note">Dibuat untuk membantu pencarian kursi pijat di Jakarta.</p>
-    </div>
-  </footer>
-
-  <script src="{{ url_for('static', path='js/app.js') }}?v=20261122-2" defer></script>
+  <script src="{{ url_for('static', path='js/app.js') }}?v=20261123-1" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
