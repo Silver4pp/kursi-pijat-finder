@@ -1,12 +1,14 @@
-import os
+import logging
 from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import models
+from . import config, models
 from .security import hash_password
 from .services import slugify
+
+logger = logging.getLogger("kpf")
 
 BODY_AREAS = [
     ("leher_bahu", "Leher dan bahu"),
@@ -31,14 +33,15 @@ ACCESS_GROUPS = [
 ]
 
 
-def seed_database(db: Session):
-    if db.scalar(select(models.User)) is not None:
+def seed_database(db: Session) -> None:
+    """Create the reference data on an empty database.
+
+    Demo accounts and the demo ratings that depend on them are opt-in
+    (ALLOW_DEMO_ACCOUNTS=1) so a deployment can never inherit a known admin
+    password just because APP_ENV was left unset.
+    """
+    if db.scalar(select(models.User)) is not None or db.scalar(select(models.Venue)) is not None:
         return
-    if os.getenv("APP_ENV") == "production" and os.getenv("SEED_DEMO_ACCOUNTS") != "1":
-        raise RuntimeError(
-            "Refusing to seed demo accounts with known passwords in production. "
-            "Create the first admin manually, or set SEED_DEMO_ACCOUNTS=1 to accept the risk."
-        )
 
     areas = {}
     for number, (code, label) in enumerate(BODY_AREAS, start=1):
@@ -52,25 +55,32 @@ def seed_database(db: Session):
         db.add(group)
         groups[code] = group
 
-    admin = models.User(
-        name="Admin Demo",
-        email="admin@example.com",
-        password_hash=hash_password("Admin123!"),
-        role="admin",
-    )
-    petugas = models.User(
-        name="Petugas Demo",
-        email="petugas@example.com",
-        password_hash=hash_password("Petugas123!"),
-        role="data_entry",
-    )
-    public_user = models.User(
-        name="Pengguna Demo",
-        email="user@example.com",
-        password_hash=hash_password("User123!"),
-        role="public",
-    )
-    db.add_all([admin, petugas, public_user])
+    admin = petugas = None
+    if config.ALLOW_DEMO_ACCOUNTS:
+        admin = models.User(
+            name="Admin Demo",
+            email="admin@example.com",
+            password_hash=hash_password("Admin123!"),
+            role="admin",
+        )
+        petugas = models.User(
+            name="Petugas Demo",
+            email="petugas@example.com",
+            password_hash=hash_password("Petugas123!"),
+            role="data_entry",
+        )
+        public_user = models.User(
+            name="Pengguna Demo",
+            email="user@example.com",
+            password_hash=hash_password("User123!"),
+            role="public",
+        )
+        db.add_all([admin, petugas, public_user])
+    else:
+        logger.info(
+            "Akun demo tidak dibuat (ALLOW_DEMO_ACCOUNTS tidak diaktifkan). "
+            "Buat admin pertama secara manual bila diperlukan."
+        )
 
     brand_a = models.Brand(name="Merk Aruna (Contoh)", slug="merk-aruna-contoh")
     brand_b = models.Brand(name="Merk Nusantara (Contoh)", slug="merk-nusantara-contoh")
@@ -307,7 +317,7 @@ def seed_database(db: Session):
         db.add(
             models.VerificationLog(
                 spot_id=spot.id,
-                checked_by_id=petugas.id,
+                checked_by_id=petugas.id if petugas else None,
                 source_title="Data contoh lokal",
                 checked_date=date(2026, 11, 1),
                 check_method="kunjungan",
@@ -317,51 +327,52 @@ def seed_database(db: Session):
             )
         )
 
-    # Approved demonstration ratings: enough for the station back-only placement
-    # and the same-type global fallback to be visible in local testing.
-    rating_users = []
-    for number in range(1, 7):
-        user = models.User(
-            name=f"Penilai Contoh {number}",
-            email=f"penilai{number}@example.com",
-            password_hash=hash_password("User123!"),
-            role="public",
-        )
-        db.add(user)
-        rating_users.append(user)
-    db.flush()
-
-    def add_rating(placement, user, scores):
-        rating = models.Rating(placement_id=placement.id, user_id=user.id)
-        db.add(rating)
-        db.flush()
-        version = models.RatingVersion(
-            rating_id=rating.id,
-            version_no=1,
-            usage_date=date(2026, 11, 1),
-            status="approved",
-            reviewed_by_id=admin.id,
-        )
-        db.add(version)
-        db.flush()
-        rating.active_version_id = version.id
-        for code, stars in scores.items():
-            db.add(
-                models.RatingAreaScore(
-                    rating_version_id=version.id, body_area_id=areas[code].id, stars=stars
-                )
+    if admin is not None:
+        # Approved demonstration ratings: enough for the station back-only placement
+        # and the same-type global fallback to be visible in local testing.
+        rating_users = []
+        for number in range(1, 7):
+            user = models.User(
+                name=f"Penilai Contoh {number}",
+                email=f"penilai{number}@example.com",
+                password_hash=hash_password("User123!"),
+                role="public",
             )
+            db.add(user)
+            rating_users.append(user)
+        db.flush()
 
-    back_scores = [4, 5, 4, 5, 4, 5]
-    for user, stars in zip(rating_users, back_scores):
-        add_rating(placements[0], user, {"punggung": stars})
+        def add_rating(placement, user, scores):
+            rating = models.Rating(placement_id=placement.id, user_id=user.id)
+            db.add(rating)
+            db.flush()
+            version = models.RatingVersion(
+                rating_id=rating.id,
+                version_no=1,
+                usage_date=date(2026, 11, 1),
+                status="approved",
+                reviewed_by_id=admin.id,
+            )
+            db.add(version)
+            db.flush()
+            rating.active_version_id = version.id
+            for code, stars in scores.items():
+                db.add(
+                    models.RatingAreaScore(
+                        rating_version_id=version.id, body_area_id=areas[code].id, stars=stars
+                    )
+                )
 
-    full_scores = [
-        {"punggung": 4, "betis": 3},
-        {"punggung": 5, "betis": 4},
-        {"punggung": 4, "betis": 4},
-    ]
-    for user, scores in zip(rating_users[:3], full_scores):
-        add_rating(placements[1], user, scores)
+        back_scores = [4, 5, 4, 5, 4, 5]
+        for user, stars in zip(rating_users, back_scores, strict=False):
+            add_rating(placements[0], user, {"punggung": stars})
+
+        full_scores = [
+            {"punggung": 4, "betis": 3},
+            {"punggung": 5, "betis": 4},
+            {"punggung": 4, "betis": 4},
+        ]
+        for user, scores in zip(rating_users[:3], full_scores, strict=False):
+            add_rating(placements[1], user, scores)
 
     db.commit()

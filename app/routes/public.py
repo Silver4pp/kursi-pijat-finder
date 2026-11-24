@@ -8,7 +8,8 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session, selectinload
 
 from .. import models, services
-from ..db import UPLOAD_DIR, get_db
+from ..db import get_db
+from ..uploads import upload_path
 from ..web import CATEGORIES, get_current_user, paginate, render
 
 router = APIRouter()
@@ -108,8 +109,6 @@ def api_suggest(q: str = "", db: Session = Depends(get_db)):
     term = (q or "").strip()
     if len(term) < 2:
         return {"venues": [], "spots": [], "brands": []}
-    like = f"%{term}%"
-
     venues = list(
         db.scalars(
             select(models.Venue)
@@ -132,10 +131,15 @@ def api_suggest(q: str = "", db: Session = Depends(get_db)):
                 models.Spot.name.contains(term, autoescape=True),
             )
             .order_by(models.Venue.name, models.Spot.floor, models.Spot.name)
-            .options(selectinload(models.Spot.venue))
-            .limit(5)
+            .options(
+                selectinload(models.Spot.venue),
+                selectinload(models.Spot.access_groups),
+            )
+            .limit(20)
         ).all()
     )
+    # Fetch a wider window, then drop private-only facilities and keep the best five.
+    spots = [spot for spot in spots if services.is_publicly_visible(spot)][:5]
     brands = list(
         db.scalars(
             select(models.Brand)
@@ -173,7 +177,12 @@ def venue_detail(venue_slug: str, request: Request, db: Session = Depends(get_db
     venue = db.scalar(select(models.Venue).where(models.Venue.slug == venue_slug))
     if not venue or not venue.is_published:
         raise HTTPException(404, "Venue tidak ditemukan")
-    return render(request, "venue.html", {"venue": venue}, db)
+    spots = [
+        spot
+        for spot in venue.spots
+        if spot.is_published and services.is_publicly_visible(spot)
+    ]
+    return render(request, "venue.html", {"venue": venue, "spots": spots}, db)
 
 
 @router.get("/venue/{venue_slug}/titik/{spot_slug}")
@@ -184,6 +193,8 @@ def spot_detail(venue_slug: str, spot_slug: str, request: Request, db: Session =
         .where(models.Venue.slug == venue_slug, models.Spot.slug == spot_slug)
     )
     if not spot or not spot.is_published or not spot.venue.is_published:
+        raise HTTPException(404, "Titik tidak ditemukan")
+    if not services.is_publicly_visible(spot):
         raise HTTPException(404, "Titik tidak ditemukan")
     photos = [
         photo
@@ -212,7 +223,7 @@ def serve_photo(photo_id: str, request: Request, db: Session = Depends(get_db)):
     internal_ok = bool(user and user.can_input)
     if not public_ok and not internal_ok:
         raise HTTPException(403, "Foto ini tidak dapat dibuka publik")
-    path = UPLOAD_DIR / photo.storage_name
+    path = upload_path(photo.storage_name)
     if not path.exists():
         raise HTTPException(404, "Berkas foto tidak ditemukan")
     return FileResponse(

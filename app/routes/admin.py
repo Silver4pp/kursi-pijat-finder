@@ -4,7 +4,7 @@ import csv
 import io
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,8 +16,8 @@ from .. import models, services
 from ..db import get_db
 from ..web import (
     CATEGORIES,
-    CITIES,
     CHANGE_KIND_LABELS,
+    CITIES,
     check_csrf,
     discard_staged_photo,
     paginate,
@@ -127,7 +127,7 @@ async def decide_change(change_request_id: str, request: Request, db: Session = 
         )
     item.reviewer_id = user.id
     item.review_note = note or None
-    item.reviewed_at = datetime.now(timezone.utc)
+    item.reviewed_at = datetime.now(UTC)
     if action == "return":
         item.status = "returned"
         discard_staged_photo(item)
@@ -262,7 +262,7 @@ async def decide_rating(version_id: str, request: Request, db: Session = Depends
         return redirect_with_flash("/admin", "Catatan pemeriksaan wajib diisi bila rating ditolak.")
     version.reviewed_by_id = user.id
     version.review_note = review_note or None
-    version.reviewed_at = datetime.now(timezone.utc)
+    version.reviewed_at = datetime.now(UTC)
     if action == "approve":
         if rating.active_version:
             rating.active_version.status = "superseded"
@@ -276,7 +276,7 @@ async def decide_rating(version_id: str, request: Request, db: Session = Depends
         message = "Rating ditolak dan tidak dihitung."
     else:
         raise HTTPException(400, "Keputusan tidak dikenali")
-    rating.updated_at = datetime.now(timezone.utc)
+    rating.updated_at = datetime.now(UTC)
     services.audit(db, user.id, "rating", rating.id, f"rating_{version.status}", {"version_id": version.id})
     db.commit()
     return redirect_with_flash("/admin", message)
@@ -356,7 +356,7 @@ def admin_export_spots_csv(request: Request, db: Session = Depends(get_db)):
                     placement.effective_from.isoformat() if placement.effective_from else "",
                 ]
             ))
-    filename = f"spots-{datetime.now(timezone.utc).date().isoformat()}.csv"
+    filename = f"spots-{datetime.now(UTC).date().isoformat()}.csv"
     return Response(
         content=buffer.getvalue().encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",

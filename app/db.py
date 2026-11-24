@@ -1,19 +1,48 @@
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-UPLOAD_DIR = DATA_DIR / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Uploads live next to the database by default. Override with UPLOAD_DIR when the
+# app runs from a read-only checkout or in a container with a mounted volume.
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR") or (DATA_DIR / "uploads")).resolve()
 
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'app.db'}")
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
+IS_SQLITE = DATABASE_URL.startswith("sqlite")
+IS_MEMORY_SQLITE = IS_SQLITE and ":memory:" in DATABASE_URL
+
+connect_args = {"check_same_thread": False} if IS_SQLITE else {}
+engine = create_engine(
+    DATABASE_URL,
+    connect_args=connect_args,
+    pool_pre_ping=True,
+)
+
+if IS_SQLITE and not IS_MEMORY_SQLITE:
+
+    @event.listens_for(engine, "connect")
+    def _apply_sqlite_pragmas(dbapi_connection, _connection_record):
+        """Make SQLite usable behind a multi-request ASGI server.
+
+        WAL lets readers proceed while a writer holds the lock, busy_timeout
+        turns immediate "database is locked" errors into a short wait, and
+        foreign_keys makes the schema's references real instead of decorative.
+        """
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cursor.close()
+
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 
@@ -29,6 +58,20 @@ SCHEMA_MIGRATIONS = {
         "CREATE INDEX IF NOT EXISTS ix_rating_versions_status ON rating_versions (status)",
     ),
 }
+
+
+def ensure_data_dirs() -> None:
+    """Create the database and upload directories on demand, not at import time.
+
+    Importing app.db must stay side-effect free so tooling (tests, migrations,
+    static analysis) can import the models without touching the filesystem.
+    """
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    if IS_SQLITE and not IS_MEMORY_SQLITE:
+        # Only create the directory that actually holds the configured database,
+        # so a test run pointed at a temp path never leaves data/ behind.
+        db_parent = Path(DATABASE_URL.split("///", 1)[-1]).resolve().parent
+        db_parent.mkdir(parents=True, exist_ok=True)
 
 
 def run_migrations() -> None:
@@ -48,7 +91,7 @@ def run_migrations() -> None:
                 conn.execute(text(statement))
             conn.execute(
                 text("INSERT INTO schema_migrations (name, applied_at) VALUES (:name, :applied_at)"),
-                {"name": name, "applied_at": datetime.now(timezone.utc).isoformat()},
+                {"name": name, "applied_at": datetime.now(UTC).isoformat()},
             )
 
 

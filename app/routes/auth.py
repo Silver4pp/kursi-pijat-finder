@@ -5,14 +5,15 @@ import re
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import config, models
 from ..db import get_db
 from ..security import hash_password, new_token, session_expiry, token_hash, verify_password
 from ..web import (
-    SESSION_COOKIE,
     CSRF_COOKIE,
+    SESSION_COOKIE,
     check_csrf,
     client_ip,
     get_current_user,
@@ -24,6 +25,16 @@ from ..web import (
 )
 
 router = APIRouter()
+
+_dummy_hash: str | None = None
+
+
+def _verify_dummy_password(password: str) -> None:
+    """Equalise login timing between existing and missing accounts."""
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = hash_password("timing-equaliser")
+    verify_password(password, _dummy_hash)
 
 
 @router.get("/masuk")
@@ -51,6 +62,9 @@ async def login(request: Request, db: Session = Depends(get_db)):
     # unique index usable.
     user = db.scalar(select(models.User).where(models.User.email == email))
     if not user or not user.is_active or not verify_password(password, user.password_hash):
+        # Burn the same PBKDF2 work for unknown emails so response time does not
+        # reveal which addresses are registered.
+        _verify_dummy_password(password)
         return render(request, "login.html", {"error": "Email atau kata sandi tidak cocok."}, db, 400)
     raw = new_token()
     db.add(models.Session(user_id=user.id, token_hash=token_hash(raw), expires_at=session_expiry(config.SESSION_COOKIE_DAYS)))
@@ -108,7 +122,12 @@ async def register(request: Request, db: Session = Depends(get_db)):
     db.flush()
     raw = new_token()
     db.add(models.Session(user_id=user.id, token_hash=token_hash(raw), expires_at=session_expiry(config.SESSION_COOKIE_DAYS)))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Two registrations raced the duplicate check; the unique index kept one.
+        db.rollback()
+        return render(request, "register.html", {"error": "Email sudah digunakan."}, db, 400)
     response = redirect_with_flash("/", "Akun berhasil dibuat.")
     set_cookie(response, SESSION_COOKIE, raw, max_age=60 * 60 * 24 * config.SESSION_COOKIE_DAYS)
     set_cookie(response, CSRF_COOKIE, new_token(), max_age=60 * 60 * 24 * config.SESSION_COOKIE_DAYS)

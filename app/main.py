@@ -11,8 +11,8 @@ if __name__ == "__main__" and not __package__:
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from . import models, services  # noqa: F401  (kept so `python app/main.py` warms up imports)
-from .db import Base, SessionLocal, engine, run_migrations
+from . import config, models, services  # noqa: F401  (kept so `python app/main.py` warms up imports)
+from .db import Base, SessionLocal, engine, ensure_data_dirs, run_migrations
 from .routes import admin, auth, internal, public, ratings
 from .seed import seed_database
 
@@ -20,9 +20,17 @@ logger = logging.getLogger("kpf")
 
 BASE_DIR = Path(__file__).resolve().parent
 
+# Pages that render account or moderation data must never be cached.
+NO_STORE_PREFIXES = ("/admin", "/internal", "/akun", "/masuk", "/daftar")
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    problems = config.validate_runtime_config()
+    if problems:
+        raise RuntimeError("Konfigurasi tidak valid:\n- " + "\n- ".join(problems))
+
+    ensure_data_dirs()
     Base.metadata.create_all(bind=engine)
     run_migrations()
     db = SessionLocal()
@@ -31,8 +39,17 @@ async def lifespan(_app: FastAPI):
         removed = services.purge_expired_auth_records(db)
         if removed:
             logger.info("Pembersihan awal menghapus %d sesi/subjek anonim kedaluwarsa", removed)
+        stale_photos = services.purge_stale_staged_photos(db, config.STAGED_PHOTO_TTL_DAYS)
+        if stale_photos:
+            logger.info("Pembersihan awal menghapus %d foto usulan yang tidak diproses", stale_photos)
     finally:
         db.close()
+
+    if config.IS_PRODUCTION and not config.TRUSTED_PROXIES:
+        logger.warning(
+            "TRUSTED_PROXIES kosong: bila aplikasi berada di belakang reverse proxy, "
+            "semua pengunjung berbagi satu bucket rate limit."
+        )
     yield
 
 
@@ -62,7 +79,10 @@ async def security_headers(request, call_next):
         "style-src 'self'; script-src 'self'; connect-src 'self'; "
         "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     )
+    if request.url.path.startswith(NO_STORE_PREFIXES):
+        response.headers.setdefault("Cache-Control", "no-store, private")
     return response
+
 
 app.include_router(public.router)
 app.include_router(ratings.router)
@@ -70,7 +90,8 @@ app.include_router(auth.router)
 app.include_router(internal.router)
 app.include_router(admin.router)
 
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8001)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

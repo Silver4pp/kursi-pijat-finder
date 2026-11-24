@@ -9,7 +9,7 @@
   <p class="lead">{{ venue.address }}</p>
 
   <div class="quick-facts" aria-label="Ringkasan gedung">
-    <div><span>Titik terbit</span><strong>{{ venue.spots | selectattr('is_published') | list | length }} titik</strong></div>
+    <div><span>Titik terbit</span><strong>{{ spots | length }} titik</strong></div>
     <div><span>Wilayah</span><strong>{{ venue.district or venue.admin_city }}</strong></div>
     <div><span>Jam buka gedung</span><strong>{{ venue.opening_hours or 'Belum dicatat' }}</strong></div>
     <div><span>Pin peta</span><strong>Gedung</strong></div>
@@ -27,7 +27,7 @@
 <section class="content-section">
   <h2>Titik kursi di gedung ini</h2>
   <div class="card-grid">
-  {% for spot in venue.spots if spot.is_published %}
+  {% for spot in spots %}
     <article class="spot-card">
       <div class="spot-card-top">
         <span class="floor-badge">Lantai {{ spot.floor }}</span>

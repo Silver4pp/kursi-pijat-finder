@@ -17,7 +17,7 @@
   <div class="stars" role="radiogroup" aria-label="Pilih bintang untuk area ini">
     {% for n in [5,4,3,2,1] %}
       <input id="{{ field_prefix }}-{{ area_id }}-{{ n }}" type="radio" name="score_{{ area_id }}" value="{{ n }}" {% if current == n %}checked{% endif %}>
-      <label for="{{ field_prefix }}-{{ area_id }}-{{ n }}" aria-label="{{ n }} bintang" title="{{ n }} bintang">★</label>
+      <label for="{{ field_prefix }}-{{ area_id }}-{{ n }}" aria-label="{{ n }} bintang" title="{{ n }} bintang">{{ icon('star') }}</label>
     {% endfor %}
   </div>
   <input class="clear-score-input" id="{{ field_prefix }}-{{ area_id }}-0" type="radio" name="score_{{ area_id }}" value="" {% if current == 0 %}checked{% endif %}>

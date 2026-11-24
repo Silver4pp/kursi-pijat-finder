@@ -1,0 +1,14 @@
+target-version = "py311"
+line-length = 130
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = [
+    # FastAPI's Depends() is a function call in a parameter default by design.
+    "B008",
+    # Tuple unpacking in loops often leaves intentional placeholders.
+    "RUF059",
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["E501", "PLW1510"]

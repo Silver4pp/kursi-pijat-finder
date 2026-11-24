@@ -2,15 +2,12 @@
 .icon-armchair { --icon: url("/static/icons/armchair.svg"); }
 .icon-banknote { --icon: url("/static/icons/banknote.svg"); }
 .icon-building-2 { --icon: url("/static/icons/building-2.svg"); }
-.icon-camera { --icon: url("/static/icons/camera.svg"); }
 .icon-check { --icon: url("/static/icons/check.svg"); }
-.icon-clock { --icon: url("/static/icons/clock.svg"); }
 .icon-eye { --icon: url("/static/icons/eye.svg"); }
 .icon-eye-off { --icon: url("/static/icons/eye-off.svg"); }
 .icon-history { --icon: url("/static/icons/history.svg"); }
 .icon-home { --icon: url("/static/icons/home.svg"); }
 .icon-layers { --icon: url("/static/icons/layers.svg"); }
-.icon-lock-keyhole { --icon: url("/static/icons/lock-keyhole.svg"); }
 .icon-log-in { --icon: url("/static/icons/log-in.svg"); }
 .icon-map-pin { --icon: url("/static/icons/map-pin.svg"); }
 .icon-navigation { --icon: url("/static/icons/navigation.svg"); }

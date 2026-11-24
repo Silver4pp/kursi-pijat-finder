@@ -3,19 +3,16 @@ import os
 import re
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app import models, services
-from app.db import Base, SessionLocal, engine
+from app import config, models, services
+from app.db import SessionLocal
 from app.main import app
-from app.seed import seed_database
-
-Base.metadata.create_all(bind=engine)
-with SessionLocal() as db:
-    seed_database(db)
 
 
 def test_main_can_be_run_as_a_script_from_another_directory(tmp_path):
@@ -700,8 +697,8 @@ def _create_venue_with_spot(db, index: int):
 
 def test_home_pagination_spans_two_pages():
     with SessionLocal() as db:
-        for i in range(11):
-            _create_venue_with_spot(db, i)
+        for number in range(11):
+            _create_venue_with_spot(db, number)
         db.commit()
 
     with TestClient(app) as client:
@@ -727,7 +724,7 @@ def test_admin_queue_pagination():
 
     with SessionLocal() as db:
         admin = db.scalar(select(models.User).where(models.User.email == "admin@example.com"))
-        for i in range(11):
+        for _ in range(11):
             db.add(
                 models.ChangeRequest(
                     submitter_id=admin.id,
@@ -787,8 +784,8 @@ def test_admin_queue_pagination():
 
 def test_admin_can_edit_venue_and_others_cannot():
     with SessionLocal() as db:
-        for i in range(11):
-            _create_venue_with_spot(db, i)
+        for number in range(11):
+            _create_venue_with_spot(db, number)
         db.commit()
 
     with SessionLocal() as db:
@@ -883,8 +880,8 @@ def test_admin_csv_export():
 
 def test_suggest_api():
     with SessionLocal() as db:
-        for i in range(11):
-            _create_venue_with_spot(db, i)
+        for number in range(11):
+            _create_venue_with_spot(db, number)
         db.commit()
 
     with TestClient(app) as client:
@@ -1193,18 +1190,18 @@ def test_forwarded_header_is_ignored_unless_peer_is_trusted(monkeypatch):
             }
         )
 
-    monkeypatch.setattr(web, "TRUSTED_PROXIES", set())
+    monkeypatch.setattr(config, "TRUSTED_PROXIES", set())
     request = make_request("198.51.100.9", "203.0.113.1, 203.0.113.2")
     assert web.client_ip(request) == "198.51.100.9"
 
-    monkeypatch.setattr(web, "TRUSTED_PROXIES", {"198.51.100.9"})
+    monkeypatch.setattr(config, "TRUSTED_PROXIES", {"198.51.100.9"})
     assert web.client_ip(request) == "203.0.113.1"
 
 
 def test_home_pagination_handles_zero_and_negative_pages():
     with SessionLocal() as db:
-        for i in range(11):
-            _create_venue_with_spot(db, i)
+        for number in range(11):
+            _create_venue_with_spot(db, number)
         db.commit()
 
     with TestClient(app) as client:
@@ -1212,3 +1209,91 @@ def test_home_pagination_handles_zero_and_negative_pages():
             response = client.get("/", params={"page": page})
             assert response.status_code == 200
             assert "Halaman 1 dari" in response.text
+
+
+def test_private_spot_is_not_exposed_on_public_pages():
+    with TestClient(app) as client:
+        detail = client.get(
+            "/venue/gedung-kantor-demo/titik/ruang-istirahat-karyawan"
+        )
+        assert detail.status_code == 404
+
+        venue_page = client.get("/venue/gedung-kantor-demo")
+        assert venue_page.status_code == 200
+        assert "Ruang istirahat karyawan" not in venue_page.text
+
+        suggest = client.get("/api/v1/suggest", params={"q": "istirahat"}).json()
+        assert suggest["spots"] == []
+
+
+def test_runtime_config_blocks_insecure_production(monkeypatch):
+    monkeypatch.setattr(config, "IS_PRODUCTION", True)
+    monkeypatch.setattr(config, "COOKIE_SECURE", False)
+    monkeypatch.setattr(config, "ALLOW_DEMO_ACCOUNTS", True)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    problems = config.validate_runtime_config()
+    assert any("COOKIE_SECURE" in problem for problem in problems)
+    assert any("DATABASE_URL" in problem for problem in problems)
+    assert any("ALLOW_DEMO_ACCOUNTS" in problem for problem in problems)
+
+    monkeypatch.setattr(config, "COOKIE_SECURE", True)
+    monkeypatch.setattr(config, "ALLOW_DEMO_ACCOUNTS", False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://example.invalid/app")
+    assert config.validate_runtime_config() == []
+
+
+def test_runtime_config_rejects_sameSite_none_without_secure_cookie(monkeypatch):
+    monkeypatch.setattr(config, "COOKIE_SAMESITE", "none")
+    monkeypatch.setattr(config, "COOKIE_SECURE", False)
+    assert any("SameSite=none" in problem or "COOKIE_SAMESITE=none" in problem
+               for problem in config.validate_runtime_config())
+
+
+def test_upload_path_rejects_unsafe_names():
+    from fastapi import HTTPException
+
+    from app.uploads import is_safe_storage_name, upload_path
+
+    assert is_safe_storage_name("staged-" + "a" * 32 + ".jpg")
+    assert not is_safe_storage_name("../etc/passwd")
+    assert not is_safe_storage_name("staged-../../etc/passwd")
+    assert not is_safe_storage_name("")
+    assert not is_safe_storage_name(None)
+
+    with pytest.raises(HTTPException) as excinfo:
+        upload_path("../../etc/passwd")
+    assert excinfo.value.status_code == 404
+
+
+def test_sensitive_pages_are_not_cached():
+    with TestClient(app) as client:
+        login(client, "admin@example.com", "Admin123!")
+        assert client.get("/admin").headers["cache-control"] == "no-store, private"
+        assert client.get("/akun/rating-saya").headers["cache-control"] == "no-store, private"
+
+
+def test_stale_staged_photos_are_purged():
+    from datetime import timedelta
+
+    from app.db import UPLOAD_DIR
+
+    with SessionLocal() as db:
+        submitter = db.scalar(select(models.User).where(models.User.role == "data_entry"))
+        item = models.ChangeRequest(
+            submitter_id=submitter.id,
+            kind="create_location",
+            payload_json="{}",
+            staged_photo_name="staged-" + "b" * 32 + ".jpg",
+            status="submitted",
+        )
+        item.created_at = datetime.now(UTC) - timedelta(days=60)
+        db.add(item)
+        db.commit()
+        item_id = item.id
+    (UPLOAD_DIR / ("staged-" + "b" * 32 + ".jpg")).write_bytes(b"demo")
+
+    with SessionLocal() as db:
+        assert services.purge_stale_staged_photos(db, 30) == 1
+        assert db.get(models.ChangeRequest, item_id).staged_photo_name is None
+    assert not (UPLOAD_DIR / ("staged-" + "b" * 32 + ".jpg")).exists()

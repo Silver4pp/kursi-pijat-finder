@@ -1,18 +1,12 @@
 """Shared web-layer helpers: constants, cookies, CSRF, flash, rendering, uploads."""
 
-import os
+import logging
 import secrets
-import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from math import ceil
 from pathlib import Path
 from urllib.parse import quote, unquote
-
-# Support both `python app/main.py` and importing the app through Uvicorn.
-if __name__ == "__main__" and not __package__:
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    __package__ = "app"
 
 from fastapi import HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
@@ -22,8 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import config, models, services
-from .db import UPLOAD_DIR
 from .security import SlidingWindowLimiter, new_token, token_hash
+from .uploads import upload_path
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -58,10 +52,6 @@ EXISTENCE_STATUSES = {"ada", "tidak_ada"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
 MAX_PHOTO_EDGE = 2560
 
-# Only trust X-Forwarded-For when the direct peer is a proxy we control;
-# otherwise the header is user input and lets clients rotate rate-limit keys.
-TRUSTED_PROXIES = {ip.strip() for ip in os.getenv("TRUSTED_PROXIES", "").split(",") if ip.strip()}
-
 login_limiter = SlidingWindowLimiter(config.RATE_LIMIT_LOGIN, config.RATE_LIMIT_WINDOW_MINUTES * 60)
 register_limiter = SlidingWindowLimiter(config.RATE_LIMIT_REGISTER, config.RATE_LIMIT_WINDOW_MINUTES * 60)
 rating_limiter = SlidingWindowLimiter(config.RATE_LIMIT_RATING, config.RATE_LIMIT_WINDOW_MINUTES * 60)
@@ -80,7 +70,7 @@ def set_cookie(response, key: str, value: str, *, max_age: int | None = None, ht
 
 def client_ip(request: Request) -> str:
     host = request.client.host if request.client else "unknown"
-    if host in TRUSTED_PROXIES:
+    if host in config.TRUSTED_PROXIES:
         hops = [
             hop.strip()
             for hop in request.headers.get("x-forwarded-for", "").split(",")
@@ -102,8 +92,8 @@ def get_current_user(request: Request, db: Session):
         return None
     expires = session.expires_at
     if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
-    if expires < datetime.now(timezone.utc):
+        expires = expires.replace(tzinfo=UTC)
+    if expires < datetime.now(UTC):
         db.delete(session)
         db.commit()
         return None
@@ -125,7 +115,7 @@ def get_anon_subject(request: Request, db: Session, create: bool = False):
         # Only touch last_seen_at on paths that commit afterwards; on plain GET
         # renders the change would be discarded when the session closes.
         if create:
-            subject.last_seen_at = datetime.now(timezone.utc)
+            subject.last_seen_at = datetime.now(UTC)
         return subject, None
     if not create:
         return None, None
@@ -218,7 +208,7 @@ def save_staged_photo(upload: UploadFile | None):
     except Exception as exc:
         raise HTTPException(400, "Foto tidak dapat diproses") from exc
     name = f"staged-{secrets.token_hex(16)}.{ext}"
-    (UPLOAD_DIR / name).write_bytes(out.getvalue())
+    upload_path(name).write_bytes(out.getvalue())
     return name
 
 
@@ -227,12 +217,12 @@ def discard_staged_photo(change_request: models.ChangeRequest):
     name = change_request.staged_photo_name
     if not name:
         return
-    path = UPLOAD_DIR / name
     try:
-        path.unlink(missing_ok=True)
+        upload_path(name).unlink(missing_ok=True)
+    except HTTPException:
+        # An unsafe name never pointed at a real upload; drop the reference.
+        pass
     except OSError:
-        import logging
-
         logging.getLogger("kpf").warning("Gagal menghapus foto staged %s", name, exc_info=True)
     change_request.staged_photo_name = None
 
@@ -254,6 +244,3 @@ def paginate(items: list, page_param, per_page: int = 10):
         "per_page": per_page,
     }
 
-
-def today() -> date:
-    return date.today()

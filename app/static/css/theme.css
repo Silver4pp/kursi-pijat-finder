@@ -365,7 +365,15 @@ svg.icon {
 
 .flash > span { flex: 1 1 auto; }
 
+/* Extend the close control to a 44px touch target without changing its size. */
+.flash-close::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
 .flash-close {
+  position: relative;
   display: grid;
   place-items: center;
   min-width: 28px;
@@ -630,8 +638,11 @@ main :is(p, li, dd) a:not(.button),
   text-decoration: none;
   cursor: pointer;
   transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease),
-    color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+    color var(--fast) var(--ease), box-shadow var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
 }
+
+.button:active:not(:disabled) { transform: scale(.96); }
 
 .button:hover {
   color: var(--btn-fg);
@@ -1185,12 +1196,6 @@ label { color: var(--ink-2); }
   gap: clamp(24px, 4vw, 56px);
 }
 
-@media (min-width: 1080px) {
-  .home-hero {
-    grid-template-columns: minmax(0, .92fr) minmax(430px, 1.08fr);
-  }
-}
-
 .hero-copy {
   display: flex;
   flex-direction: column;
@@ -1389,10 +1394,6 @@ label { color: var(--ink-2); }
   padding: var(--space-4) 0 var(--space-2);
 }
 
-@media (min-width: 720px) {
-  .filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
 .filter-grid label { font-size: var(--text-8); }
 
 .filter-grid select,
@@ -1535,22 +1536,6 @@ label { color: var(--ink-2); }
   position: relative;
   height: min(62dvh, 560px);
   min-height: 380px;
-}
-
-@media (min-width: 1180px) {
-  .map-layout {
-    grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .map-wrap {
-    order: 2;
-    position: sticky;
-    top: var(--space-5);
-    height: clamp(420px, calc(100dvh - 3rem), 680px);
-  }
-
-  .results { order: 1; }
 }
 
 .map {
@@ -2196,13 +2181,6 @@ label { color: var(--ink-2); }
   margin-top: var(--space-5);
 }
 
-@media (min-width: 900px) {
-  .two-column {
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, .85fr);
-    align-items: start;
-  }
-}
-
 .content-section { margin-top: var(--space-6); }
 
 .content-section > h2,
@@ -2501,10 +2479,6 @@ label { color: var(--ink-2); }
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-2xl);
-}
-
-@media (min-width: 760px) {
-  .directory-intro { grid-template-columns: minmax(0, 1fr) auto; }
 }
 
 .directory-intro h1 {
@@ -2920,10 +2894,19 @@ label { color: var(--ink-2); }
   min-height: 43px;
   color: var(--line-2);
   border-radius: var(--r-md);
-  font-size: var(--text-30px);
-  line-height: 1;
   cursor: pointer;
   transition: color 120ms var(--ease), background-color 120ms var(--ease);
+}
+
+.stars label .icon {
+  width: 26px;
+  height: 26px;
+}
+
+/* One star asset, recoloured per state: outline is empty, fill is selected. */
+.stars input:checked + label .icon,
+.stars input:checked + label ~ label .icon {
+  --icon: url("/static/icons/star-filled.svg");
 }
 
 .stars label:hover {
@@ -3049,11 +3032,10 @@ label { color: var(--ink-2); }
 
 /* ---------- 14. Responsive layout ---------- */
 
-@media (min-width: 981px) {
-  .view-toggle { display: none; }
-}
+/* Four breakpoints only. Keep new rules on this scale:
+   480px phone · 768px tablet · 1024px small desktop · 1280px wide desktop. */
 
-@media (max-width: 980px) {
+@media (max-width: 1023px) {
   .app-layout { display: block; }
 
   .social-sidebar {
@@ -3190,7 +3172,7 @@ label { color: var(--ink-2); }
   .explorer-toolbar { align-items: flex-start; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .form-grid { grid-template-columns: minmax(0, 1fr); }
 
   .table-row {
@@ -3225,7 +3207,7 @@ label { color: var(--ink-2); }
   .home-hero { gap: var(--space-5); }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .search-line { grid-template-columns: minmax(0, 1fr); }
 
   .search-submit { width: 100%; }
@@ -3241,82 +3223,45 @@ label { color: var(--ink-2); }
   .pager .pager-info { margin-right: 0; flex: 1 0 100%; }
 }
 
-/* ---------- 15. Dark theme ---------- */
+@media (min-width: 768px) {
+  .filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-[data-theme="dark"] {
-  color-scheme: dark;
-
-  --bg: #0b1211;
-  --surface: #131d1b;
-  --surface-2: #1a2624;
-  --surface-3: #223130;
-  --surface-warm: #1a211f;
-  --surface-sage: #16241f;
-
-  --ink: #eaf2f0;
-  --ink-2: #c8d5d1;
-  --muted: #a2b2ae;
-  --faint: #93a5a0;
-  --on-accent: #04211d;
-
-  --line: #24322f;
-  --line-2: #2f3f3c;
-  --line-strong: #6c817c;
-
-  --accent: #5eead4;
-  --accent-deep: #2dd4bf;
-  --accent-ink: #99f6e4;
-  --accent-soft: #10312c;
-  --accent-line: #1f4a43;
-  --accent-ring: rgba(94, 234, 212, .3);
-  --accent-glow: rgba(94, 234, 212, .25);
-
-  --gold: #f5c86b;
-  --gold-deep: #f3c979;
-  --gold-soft: #2a2213;
-  --gold-line: #453619;
-  --danger: #fca5a0;
-  --danger-soft: #331b19;
-  --danger-line: #4a2723;
-  --success: #7ee2b0;
-  --success-soft: #12291f;
-  --success-line: #1d4436;
-  --success-tint: rgba(126, 226, 176, .16);
-  --warn: #f0c778;
-  --warn-soft: #2b2415;
-  --warn-line: #4a3c1d;
-
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 22px -14px rgba(0, 0, 0, .6);
-  --shadow-2: 0 2px 8px rgba(0, 0, 0, .45), 0 24px 50px -24px rgba(0, 0, 0, .8);
-  --shadow-3: 0 30px 70px -30px rgba(0, 0, 0, .9);
-
-  --payload-bg: #0a1211;
+  .directory-intro { grid-template-columns: minmax(0, 1fr) auto; }
 }
 
-/* The basemap stays light, so map chrome keeps a white ring in both themes. */
-[data-theme="dark"] :is(.map-pin, .venue-cluster, .legend-pin) { border-color: var(--map-halo); }
+@media (min-width: 1024px) {
+  .view-toggle { display: none; }
 
-[data-theme="dark"] .flash-close:hover { background: var(--success-tint); }
-
-[data-theme="dark"] .leaflet-control-attribution,
-[data-theme="dark"] .leaflet-bar a { color: var(--ink-2) !important; }
-
-[data-theme="dark"] .payload {
-  color: var(--payload-ink);
-  background: var(--payload-bg);
+  .two-column {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, .85fr);
+    align-items: start;
+  }
 }
 
-/* ---------- 16. Motion ---------- */
+@media (min-width: 1280px) {
+  .home-hero {
+    grid-template-columns: minmax(0, .92fr) minmax(430px, 1.08fr);
+  }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes shimmer { to { background-position: -220% 0; } }
-@keyframes panel-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  .map-layout {
+    grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .map-wrap {
+    order: 2;
+    position: sticky;
+    top: var(--space-5);
+    height: clamp(420px, calc(100dvh - 3rem), 680px);
+  }
+
+  .results { order: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+
+  .button:active:not(:disabled) { transform: none; }
 
   *,
   *::before,

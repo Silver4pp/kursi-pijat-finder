@@ -10,6 +10,7 @@ htmlcov/
 
 # Virtual environments and configuration
 .venv/
+.venvs/
 venv/
 env/
 .env
@@ -34,8 +35,8 @@ Thumbs.db
 build/
 dist/
 
-# Build testing
-tests/
-
-# Build Workflow
-.github/
+# Arsip dan log
+*.zip
+*.tar.gz
+*.log
+.coverage.*

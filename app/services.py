@@ -1,15 +1,19 @@
 import json
+import logging
 import math
 import re
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from . import models
+from .uploads import upload_path
+
+logger = logging.getLogger("kpf")
 
 PAYMENT_LABELS = {
     "uang_tunai": "Uang tunai",
@@ -104,13 +108,13 @@ def purge_expired_auth_records(db: Session) -> int:
     Anonymous subjects that still own ratings are kept so moderation history
     stays intact. Returns the number of removed records.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     removed = 0
 
     for session in db.scalars(select(models.Session)).all():
         expires = session.expires_at
         if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
+            expires = expires.replace(tzinfo=UTC)
         if expires < now:
             db.delete(session)
             removed += 1
@@ -119,11 +123,41 @@ def purge_expired_auth_records(db: Session) -> int:
     for subject in db.scalars(select(models.AnonymousSubject)).all():
         last_seen = subject.last_seen_at
         if last_seen.tzinfo is None:
-            last_seen = last_seen.replace(tzinfo=timezone.utc)
+            last_seen = last_seen.replace(tzinfo=UTC)
         if last_seen < cutoff and not subject.ratings:
             db.delete(subject)
             removed += 1
 
+    db.commit()
+    return removed
+
+
+def purge_stale_staged_photos(db: Session, ttl_days: int) -> int:
+    """Delete staged photos of proposals that were never reviewed.
+
+    Files are only removed once the proposal is older than ttl_days, so an admin
+    still has a window to apply a proposal that carries a photo.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
+    stale = db.scalars(
+        select(models.ChangeRequest).where(
+            models.ChangeRequest.staged_photo_name.is_not(None),
+            models.ChangeRequest.status == "submitted",
+            models.ChangeRequest.created_at < cutoff,
+        )
+    ).all()
+    removed = 0
+    for item in stale:
+        name = item.staged_photo_name
+        if name:
+            try:
+                upload_path(name).unlink(missing_ok=True)
+            except OSError:
+                logger.warning(
+                    "Gagal menghapus foto usulan kedaluwarsa %s", name, exc_info=True
+                )
+        item.staged_photo_name = None
+        removed += 1
     db.commit()
     return removed
 
@@ -170,6 +204,16 @@ def summarize_scores(rows):
             "anonymous_count": composition[area_id]["anonymous"],
         }
     return result
+
+
+def is_publicly_visible(spot: models.Spot, *, include_private: bool = False) -> bool:
+    """Whether a spot may appear on a public page or public JSON endpoint.
+
+    Private-only facilities (staff rooms, resident lounges) stay out of every
+    public surface unless a caller explicitly opts in. Keep this as the single
+    source of truth so search, detail pages, and autocomplete cannot disagree.
+    """
+    return bool(spot) and (include_private or not spot.is_private_only)
 
 
 def _public_type_placements(db: Session, chair_type_id) -> list[models.Placement]:
@@ -433,9 +477,17 @@ def apply_spot_update(db: Session, change_request: models.ChangeRequest, admin: 
         "existence_status": spot.existence_status,
         "access_groups": sorted(spot.access_codes),
     }
-    for field in ["floor", "zone_landmark", "recommended_entrance", "walking_directions", "access_notes", "existence_status"]:
-        if field in changes:
-            setattr(spot, field, changes[field] or (None if field not in {"floor", "zone_landmark", "existence_status"} else getattr(spot, field)))
+    for name in [
+        "floor",
+        "zone_landmark",
+        "recommended_entrance",
+        "walking_directions",
+        "access_notes",
+        "existence_status",
+    ]:
+        if name in changes:
+            keep_current = name in {"floor", "zone_landmark", "existence_status"}
+            setattr(spot, name, changes[name] or (getattr(spot, name) if keep_current else None))
     if "access_groups" in changes:
         codes = changes["access_groups"] or ["umum"]
         spot.access_groups = _resolve_access_groups(db, codes)
@@ -611,9 +663,7 @@ def filter_spots(db: Session, params: dict) -> SearchResult:
             continue
         if min_qty is not None:
             known = [p.quantity for p in matching_placements if p.quantity is not None]
-            if known and sum(known) >= min_qty:
-                pass
-            elif not known and include_unknown_qty:
+            if known and sum(known) >= min_qty or not known and include_unknown_qty:
                 pass
             else:
                 if not known:
