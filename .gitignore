@@ -34,9 +34,3 @@ Thumbs.db
 # Build artifacts
 build/
 dist/
-
-# Arsip dan log
-*.zip
-*.tar.gz
-*.log
-.coverage.*

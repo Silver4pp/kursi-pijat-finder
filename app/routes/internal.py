@@ -66,7 +66,9 @@ def new_proposal(request: Request, db: Session = Depends(get_db)):
         {
             "venues": list(db.scalars(select(models.Venue).order_by(models.Venue.name)).all()),
             "brands": list(db.scalars(select(models.Brand).order_by(models.Brand.name)).all()),
-            "chair_types": list(db.scalars(select(models.ChairType).order_by(models.ChairType.name)).all()),
+            "chair_types": list(
+                db.scalars(select(models.ChairType).order_by(models.ChairType.name)).all()
+            ),
             "access_groups": list(db.scalars(select(models.AccessGroup)).all()),
             "today": date.today(),
         },
@@ -97,7 +99,12 @@ async def create_proposal(request: Request, db: Session = Depends(get_db)):
     if existing_venue_id and not db.get(models.Venue, existing_venue_id):
         raise HTTPException(400, "Venue lama yang dipilih tidak ditemukan")
     if not existing_venue_id:
-        if not clean("address") or not clean("admin_city") or not clean("latitude") or not clean("longitude"):
+        if (
+            not clean("address")
+            or not clean("admin_city")
+            or not clean("latitude")
+            or not clean("longitude")
+        ):
             raise HTTPException(400, "Venue baru wajib mempunyai alamat, kota, lintang, dan bujur")
         try:
             latitude = float(clean("latitude").replace(",", "."))
@@ -105,7 +112,9 @@ async def create_proposal(request: Request, db: Session = Depends(get_db)):
         except ValueError as exc:
             raise HTTPException(400, "Lintang dan bujur harus berupa angka") from exc
         if not -7.0 <= latitude <= -5.0 or not 105.0 <= longitude <= 108.0:
-            raise HTTPException(400, "Koordinat venue berada di luar rentang Jakarta yang diharapkan")
+            raise HTTPException(
+                400, "Koordinat venue berada di luar rentang Jakarta yang diharapkan"
+            )
     for numeric_field in ["quantity", "price_idr", "duration_minutes"]:
         raw_value = clean(numeric_field)
         if raw_value:
@@ -113,7 +122,9 @@ async def create_proposal(request: Request, db: Session = Depends(get_db)):
                 if int(raw_value) < 0:
                     raise ValueError
             except ValueError as exc:
-                raise HTTPException(400, f"Kolom {numeric_field} harus berupa bilangan bulat yang valid") from exc
+                raise HTTPException(
+                    400, f"Kolom {numeric_field} harus berupa bilangan bulat yang valid"
+                ) from exc
 
     existence = clean("existence_status") or "ada"
     if existence not in EXISTENCE_STATUSES:
@@ -188,7 +199,9 @@ async def create_proposal(request: Request, db: Session = Depends(get_db)):
     )
     db.add(change_request)
     db.commit()
-    return redirect_with_flash("/internal", "Usulan lokasi terkirim dan menunggu pemeriksaan admin.")
+    return redirect_with_flash(
+        "/internal", "Usulan lokasi terkirim dan menunggu pemeriksaan admin."
+    )
 
 
 @router.get("/internal/titik/{spot_id}/usulkan")
@@ -202,7 +215,11 @@ def propose_spot_update(spot_id: str, request: Request, db: Session = Depends(ge
     return render(
         request,
         "proposal_update.html",
-        {"spot": spot, "access_groups": list(db.scalars(select(models.AccessGroup)).all()), "today": date.today()},
+        {
+            "spot": spot,
+            "access_groups": list(db.scalars(select(models.AccessGroup)).all()),
+            "today": date.today(),
+        },
         db,
     )
 
@@ -254,4 +271,6 @@ async def create_spot_update(spot_id: str, request: Request, db: Session = Depen
     )
     db.add(change_request)
     db.commit()
-    return redirect_with_flash("/internal", "Usulan perubahan titik terkirim dan menunggu pemeriksaan admin.")
+    return redirect_with_flash(
+        "/internal", "Usulan perubahan titik terkirim dan menunggu pemeriksaan admin."
+    )

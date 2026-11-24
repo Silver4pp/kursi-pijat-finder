@@ -24,11 +24,29 @@ BASE_DIR = Path(__file__).resolve().parent
 NO_STORE_PREFIXES = ("/admin", "/internal", "/akun", "/masuk", "/daftar")
 
 
+def configure_logging() -> None:
+    """Install a handler for the app's own logger.
+
+    Uvicorn only configures its own loggers. Without this, logger.info() in the
+    app is dropped (root defaults to WARNING) and logger.exception() prints a bare
+    traceback with no timestamp or level.
+    """
+    if logging.getLogger().handlers:
+        return  # A server (gunicorn, a test runner) already owns logging.
+    logging.basicConfig(
+        level=config.LOG_LEVEL,
+        format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+    )
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Validate first: an invalid LOG_LEVEL would otherwise crash inside basicConfig
+    # before the guard could report it in a readable list.
     problems = config.validate_runtime_config()
     if problems:
         raise RuntimeError("Konfigurasi tidak valid:\n- " + "\n- ".join(problems))
+    configure_logging()
 
     ensure_data_dirs()
     Base.metadata.create_all(bind=engine)
@@ -41,7 +59,9 @@ async def lifespan(_app: FastAPI):
             logger.info("Pembersihan awal menghapus %d sesi/subjek anonim kedaluwarsa", removed)
         stale_photos = services.purge_stale_staged_photos(db, config.STAGED_PHOTO_TTL_DAYS)
         if stale_photos:
-            logger.info("Pembersihan awal menghapus %d foto usulan yang tidak diproses", stale_photos)
+            logger.info(
+                "Pembersihan awal menghapus %d foto usulan yang tidak diproses", stale_photos
+            )
     finally:
         db.close()
 
@@ -94,4 +114,9 @@ app.include_router(admin.router)
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(
+        app,
+        host=config.HOST,
+        port=config.PORT,
+        log_level=config.LOG_LEVEL.lower(),
+    )

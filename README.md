@@ -63,7 +63,7 @@ Sebagai alternatif, `app/main.py` juga bisa dijalankan langsung dengan Python da
 & "$venv\Scripts\python.exe" .\app\main.py
 ```
 
-Cara langsung menjalankan server tanpa `--reload`. Buka `http://127.0.0.1:8001`. Database dan data contoh dibuat otomatis saat aplikasi pertama kali dijalankan.
+Cara langsung menjalankan server tanpa `--reload`. Alamat dan portnya dibaca dari `HOST` dan `PORT` (bawaan `127.0.0.1:8001`), jadi `PORT=8002` cukup diatur sebagai variabel lingkungan tanpa menyunting kode. Buka `http://127.0.0.1:8001`. Database dan data contoh dibuat otomatis saat aplikasi pertama kali dijalankan.
 
 ## Akun lokal
 
@@ -107,6 +107,11 @@ Variabel lingkungan yang dikenali aplikasi:
 | `RATE_LIMIT_WINDOW_MINUTES` | `15` | Panjang jendela waktu pembatas laju (menit) |
 | `TRUSTED_PROXIES` | kosong | Daftar IP proxy (dipisah koma) yang `X-Forwarded-For`-nya dipercaya |
 | `STAGED_PHOTO_TTL_DAYS` | `30` | Usia foto usulan yang belum diperiksa sebelum dihapus otomatis |
+| `LOG_LEVEL` | `INFO` | Level log aplikasi (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+| `HOST` | `127.0.0.1` | Alamat ikat saat dijalankan lewat `python app/main.py` |
+| `PORT` | `8001` | Port ikat saat dijalankan lewat `python app/main.py` |
+
+Daftar lengkap beserta nilainya ada di [`.env.example`](.env.example). Salin berkas itu menjadi `.env` dan sesuaikan; `.env` sudah diabaikan oleh `.gitignore`. Aplikasi tidak memuat berkas `.env` sendiri, jadi ekspor variabelnya di shell atau di environment layanan.
 
 Pembatas laju disimpan di memori proses; jalankan satu proses Uvicorn atau pasang penyimpanan bersama bila menjalankan banyak worker. Sesi login kedaluwarsa dan subjek anonim yang tidak aktif lebih dari setahun dibersihkan otomatis saat aplikasi dimulai, begitu juga foto usulan yang melewati `STAGED_PHOTO_TTL_DAYS`.
 
@@ -124,13 +129,17 @@ Pasang alat pengujian dari lockfile terpisah:
 
 ```powershell
 & "$venv\Scripts\python.exe" -m pip install --require-hashes -r requirements-dev.txt
-& "$venv\Scripts\python.exe" -m pytest -q
+& "$venv\Scripts\python.exe" -m pytest -q tests
 ```
 
 ```bash
 "$VENV_DIR/bin/python" -m pip install --require-hashes -r requirements-dev.txt
-"$VENV_DIR/bin/python" -m pytest -q
+"$VENV_DIR/bin/python" -m pytest -q tests
 ```
+
+Konfigurasi pytest ada di `tests/pytest.ini`, jadi perintahnya memakai `tests` sebagai argumen. `pytest` tanpa argumen tetap jalan, tetapi berkas konfigurasi di subfolder hanya dibaca saat folder itu disebut.
+
+Dependensi diuji terhadap basis data advisory lewat `pip-audit` di CI, dan Dependabot membuka pull request mingguan untuk `requirements.txt`, `requirements-dev.txt`, dan action GitHub.
 
 `tests/conftest.py` mengarahkan database dan folder unggahan ke direktori sementara, mengatur ulang bucket pembatas laju sebelum dan sesudah setiap test, lalu mengisi data contoh sekali per sesi. Test tidak menyentuh `data/` milik aplikasi.
 

@@ -90,7 +90,9 @@ def run_migrations() -> None:
             for statement in statements:
                 conn.execute(text(statement))
             conn.execute(
-                text("INSERT INTO schema_migrations (name, applied_at) VALUES (:name, :applied_at)"),
+                text(
+                    "INSERT INTO schema_migrations (name, applied_at) VALUES (:name, :applied_at)"
+                ),
                 {"name": name, "applied_at": datetime.now(UTC).isoformat()},
             )
 

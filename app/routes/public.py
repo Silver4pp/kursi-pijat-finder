@@ -41,7 +41,9 @@ def home(request: Request, db: Session = Depends(get_db)):
         )
         item["spots"].append(spot)
     brands = list(db.scalars(select(models.Brand).order_by(models.Brand.name)).all())
-    access_groups = list(db.scalars(select(models.AccessGroup).order_by(models.AccessGroup.label)).all())
+    access_groups = list(
+        db.scalars(select(models.AccessGroup).order_by(models.AccessGroup.label)).all()
+    )
     venue_list = list(venues_by_id.values())
     page_items, pager = paginate(venue_list, params.get("page"), 10)
     base_query = {k: v for k, v in params.items() if k != "page"}
@@ -86,7 +88,10 @@ def api_venues(request: Request, db: Session = Depends(get_db)):
             },
         )
         entry["spot_count"] += 1
-    return {"venues": list(venues.values()), "hidden_unknown_quantity_spots": result.hidden_unknown_qty}
+    return {
+        "venues": list(venues.values()),
+        "hidden_unknown_quantity_spots": result.hidden_unknown_qty,
+    }
 
 
 @router.get("/api/v1/venues/{venue_id}/spots")
@@ -178,9 +183,7 @@ def venue_detail(venue_slug: str, request: Request, db: Session = Depends(get_db
     if not venue or not venue.is_published:
         raise HTTPException(404, "Venue tidak ditemukan")
     spots = [
-        spot
-        for spot in venue.spots
-        if spot.is_published and services.is_publicly_visible(spot)
+        spot for spot in venue.spots if spot.is_published and services.is_publicly_visible(spot)
     ]
     return render(request, "venue.html", {"venue": venue, "spots": spots}, db)
 
@@ -199,13 +202,22 @@ def spot_detail(venue_slug: str, spot_slug: str, request: Request, db: Session =
     photos = [
         photo
         for photo in spot.photos
-        if photo.status == "approved" and photo.intended_use in {"publik", "bukti_internal_dan_publik"}
+        if photo.status == "approved"
+        and photo.intended_use in {"publik", "bukti_internal_dan_publik"}
     ]
-    events = sorted(spot.public_events, key=lambda e: (e.effective_date, e.created_at), reverse=True)
+    events = sorted(
+        spot.public_events, key=lambda e: (e.effective_date, e.created_at), reverse=True
+    )
     return render(
         request,
         "spot.html",
-        {"spot": spot, "venue": spot.venue, "placements": services.active_placements(spot), "photos": photos, "events": events},
+        {
+            "spot": spot,
+            "venue": spot.venue,
+            "placements": services.active_placements(spot),
+            "photos": photos,
+            "events": events,
+        },
         db,
     )
 

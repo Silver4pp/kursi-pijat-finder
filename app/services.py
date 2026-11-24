@@ -153,9 +153,7 @@ def purge_stale_staged_photos(db: Session, ttl_days: int) -> int:
             try:
                 upload_path(name).unlink(missing_ok=True)
             except OSError:
-                logger.warning(
-                    "Gagal menghapus foto usulan kedaluwarsa %s", name, exc_info=True
-                )
+                logger.warning("Gagal menghapus foto usulan kedaluwarsa %s", name, exc_info=True)
         item.staged_photo_name = None
         removed += 1
     db.commit()
@@ -168,7 +166,10 @@ def _approved_scores(db: Session, placements):
         return []
     stmt = (
         select(models.RatingAreaScore, models.Rating)
-        .join(models.RatingVersion, models.RatingVersion.id == models.RatingAreaScore.rating_version_id)
+        .join(
+            models.RatingVersion,
+            models.RatingVersion.id == models.RatingAreaScore.rating_version_id,
+        )
         .join(models.Rating, models.Rating.id == models.RatingVersion.rating_id)
         .where(
             models.Rating.placement_id.in_(placement_ids),
@@ -242,13 +243,8 @@ def rating_summary_for_placement(db: Session, placement: models.Placement):
     local = summarize_scores(_approved_scores(db, [placement]))
     type_placements = _public_type_placements(db, placement.chair_type_id)
     global_summary = summarize_scores(_approved_scores(db, type_placements))
-    all_areas = {
-        mapping.body_area_id: mapping
-        for mapping in placement.chair_type.body_areas
-    }
-    ordered = sorted(
-        all_areas.values(), key=lambda m: m.body_area.sort_order if m.body_area else 0
-    )
+    all_areas = {mapping.body_area_id: mapping for mapping in placement.chair_type.body_areas}
+    ordered = sorted(all_areas.values(), key=lambda m: m.body_area.sort_order if m.body_area else 0)
     output = []
     empty = {"count": 0, "average": None, "account_count": 0, "anonymous_count": 0}
     for mapping in ordered:
@@ -413,11 +409,14 @@ def apply_create_location(db: Session, change_request: models.ChangeRequest, adm
         tariff_type=placement_data.get("tariff_type") or None,
         price_idr=int(placement_data["price_idr"]) if placement_data.get("price_idr") else None,
         duration_minutes=(
-            int(placement_data["duration_minutes"]) if placement_data.get("duration_minutes") else None
+            int(placement_data["duration_minutes"])
+            if placement_data.get("duration_minutes")
+            else None
         ),
         price_is_starting_from=bool(placement_data.get("price_is_starting_from")),
         payment_methods=";".join(placement_data.get("payment_methods") or []),
-        effective_from=parse_date(payload.get("verification", {}).get("checked_date")) or date.today(),
+        effective_from=parse_date(payload.get("verification", {}).get("checked_date"))
+        or date.today(),
         is_published=True,
     )
     db.add(placement)
@@ -456,17 +455,28 @@ def apply_create_location(db: Session, change_request: models.ChangeRequest, adm
             )
         )
 
-    audit(db, admin.id, "spot", spot.id, "change_request_applied", {"change_request_id": change_request.id})
+    audit(
+        db,
+        admin.id,
+        "spot",
+        spot.id,
+        "change_request_applied",
+        {"change_request_id": change_request.id},
+    )
     return spot, placement
 
 
-def apply_spot_update(db: Session, change_request: models.ChangeRequest, admin: models.User, change_kind: str):
+def apply_spot_update(
+    db: Session, change_request: models.ChangeRequest, admin: models.User, change_kind: str
+):
     payload = json.loads(change_request.payload_json)
     spot = change_request.target_spot
     if spot is None:
         raise ValueError("Target titik tidak ditemukan")
     if change_request.base_version and spot.version != change_request.base_version:
-        raise ValueError("Data titik sudah berubah sejak usulan dibuat. Minta petugas mengajukan ulang.")
+        raise ValueError(
+            "Data titik sudah berubah sejak usulan dibuat. Minta petugas mengajukan ulang."
+        )
     changes = payload.get("changes") or {}
     old = {
         "floor": spot.floor,
@@ -544,7 +554,12 @@ def apply_spot_update(db: Session, change_request: models.ChangeRequest, admin: 
         "spot",
         spot.id,
         "change_request_applied",
-        {"change_request_id": change_request.id, "change_kind": change_kind, "before": old, "after": changes},
+        {
+            "change_request_id": change_request.id,
+            "change_kind": change_kind,
+            "before": old,
+            "after": changes,
+        },
     )
     return spot
 
@@ -650,7 +665,8 @@ def filter_spots(db: Session, params: dict) -> SearchResult:
         if q and q not in searchable:
             continue
         matching_placements = [
-            p for p in placements
+            p
+            for p in placements
             if (not params.get("brand_id") or p.brand_id == params["brand_id"])
             and (not params.get("payment") or params["payment"] in p.payment_codes)
         ]

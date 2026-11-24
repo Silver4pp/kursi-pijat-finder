@@ -5,10 +5,16 @@ directory, and the demo-account switch are already pointed at throwaway values.
 """
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
+# pytest resolves its rootdir to tests/ when it finds tests/pytest.ini, which puts
+# tests/ (not the project root) on sys.path. Insert the project root explicitly so
+# `from app import ...` works no matter how pytest is invoked.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _TMP_ROOT = Path(tempfile.mkdtemp(prefix="kpf-tests-"))
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_ROOT / 'app.db'}"

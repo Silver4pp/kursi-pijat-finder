@@ -8,21 +8,43 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on the same branch so a stream of pushes does not queue up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # README promises 3.11+, so 3.11 is the compatibility floor and 3.15 the
+        # version the project is developed against. Drop 3.11 only when the floor moves.
+        python-version: ["3.11", "3.15"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.15"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install locked dependencies
         run: python -m pip install --require-hashes -r requirements-dev.txt
 
+      - name: Audit dependencies
+        # --strict fails the build on any advisory, including ones pip-audit cannot
+        # map to a fixed version. pip-audit itself is pinned in requirements-dev.txt.
+        run: |
+          python -m pip_audit -r requirements.txt --strict
+          python -m pip_audit -r requirements-dev.txt --strict
+
       - name: Lint
         run: python -m ruff check app tests
 
+      - name: Check formatting
+        run: python -m ruff format --check app tests
+
       - name: Test
-        run: python -m pytest -q
+        run: python -m pytest -q tests

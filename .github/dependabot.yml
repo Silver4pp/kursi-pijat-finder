@@ -1,0 +1,23 @@
+version: 2
+
+# The .txt files are hash-locked; Dependabot regenerates the hashes when it bumps
+# a pin. The .in files hold the version ranges, so a bump still has to satisfy
+# them before it can be merged.
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"

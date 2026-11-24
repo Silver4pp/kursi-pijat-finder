@@ -53,11 +53,17 @@ MAX_PHOTO_BYTES = 5 * 1024 * 1024
 MAX_PHOTO_EDGE = 2560
 
 login_limiter = SlidingWindowLimiter(config.RATE_LIMIT_LOGIN, config.RATE_LIMIT_WINDOW_MINUTES * 60)
-register_limiter = SlidingWindowLimiter(config.RATE_LIMIT_REGISTER, config.RATE_LIMIT_WINDOW_MINUTES * 60)
-rating_limiter = SlidingWindowLimiter(config.RATE_LIMIT_RATING, config.RATE_LIMIT_WINDOW_MINUTES * 60)
+register_limiter = SlidingWindowLimiter(
+    config.RATE_LIMIT_REGISTER, config.RATE_LIMIT_WINDOW_MINUTES * 60
+)
+rating_limiter = SlidingWindowLimiter(
+    config.RATE_LIMIT_RATING, config.RATE_LIMIT_WINDOW_MINUTES * 60
+)
 
 
-def set_cookie(response, key: str, value: str, *, max_age: int | None = None, httponly: bool = True):
+def set_cookie(
+    response, key: str, value: str, *, max_age: int | None = None, httponly: bool = True
+):
     response.set_cookie(
         key,
         value,
@@ -85,9 +91,7 @@ def get_current_user(request: Request, db: Session):
     raw = request.cookies.get(SESSION_COOKIE)
     if not raw:
         return None
-    session = db.scalar(
-        select(models.Session).where(models.Session.token_hash == token_hash(raw))
-    )
+    session = db.scalar(select(models.Session).where(models.Session.token_hash == token_hash(raw)))
     if not session:
         return None
     expires = session.expires_at
@@ -160,7 +164,9 @@ def redirect_with_flash(url: str, message: str, status_code: int = 303):
 def check_csrf(request: Request, supplied: str | None):
     expected = request.cookies.get(CSRF_COOKIE)
     if not expected or not supplied or not secrets.compare_digest(expected, supplied):
-        raise HTTPException(status_code=403, detail="Token formulir tidak valid. Muat ulang halaman.")
+        raise HTTPException(
+            status_code=403, detail="Token formulir tidak valid. Muat ulang halaman."
+        )
 
 
 def require_user(request: Request, db: Session, roles=None):
@@ -168,7 +174,9 @@ def require_user(request: Request, db: Session, roles=None):
     if user is None:
         return None, redirect_with_flash("/masuk", "Silakan masuk terlebih dahulu.")
     if roles and user.role not in roles:
-        return None, redirect_with_flash("/", "Akun Anda tidak mempunyai hak untuk membuka halaman itu.")
+        return None, redirect_with_flash(
+            "/", "Akun Anda tidak mempunyai hak untuk membuka halaman itu."
+        )
     return user, None
 
 
@@ -243,4 +251,3 @@ def paginate(items: list, page_param, per_page: int = 10):
         "total": total,
         "per_page": per_page,
     }
-

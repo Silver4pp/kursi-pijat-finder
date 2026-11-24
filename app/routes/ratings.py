@@ -72,7 +72,12 @@ def render_rating_page(request: Request, db: Session, placement, *, error=None, 
 @router.get("/nilai/{placement_id}")
 def rating_page(placement_id: str, request: Request, db: Session = Depends(get_db)):
     placement = db.get(models.Placement, placement_id)
-    if not placement or not placement.is_published or not placement.spot.is_published or not placement.spot.venue.is_published:
+    if (
+        not placement
+        or not placement.is_published
+        or not placement.spot.is_published
+        or not placement.spot.venue.is_published
+    ):
         raise HTTPException(404, "Penempatan kursi tidak ditemukan")
     if not placement.can_rate:
         return render(
@@ -121,8 +126,13 @@ async def parse_rating_scores(request: Request, placement: models.Placement):
 @router.post("/nilai/{placement_id}")
 async def submit_rating(placement_id: str, request: Request, db: Session = Depends(get_db)):
     placement = db.get(models.Placement, placement_id)
-    if (not placement or not placement.is_published or not placement.spot.is_published
-            or not placement.spot.venue.is_published or not placement.can_rate):
+    if (
+        not placement
+        or not placement.is_published
+        or not placement.spot.is_published
+        or not placement.spot.venue.is_published
+        or not placement.can_rate
+    ):
         raise HTTPException(404, "Rating untuk penempatan ini belum dibuka")
     if config.RATE_LIMIT_ENABLED and not rating_limiter.allow(f"rating:{client_ip(request)}"):
         return render_rating_page(
@@ -133,7 +143,9 @@ async def submit_rating(placement_id: str, request: Request, db: Session = Depen
     except HTTPException as exc:
         if exc.status_code != 400:
             raise
-        return render_rating_page(request, db, placement, error=exc.detail, submitted=dict(await request.form()))
+        return render_rating_page(
+            request, db, placement, error=exc.detail, submitted=dict(await request.form())
+        )
     user = get_current_user(request, db)
     anon_subject, raw_anon = (None, None)
     if not user:
@@ -141,7 +153,8 @@ async def submit_rating(placement_id: str, request: Request, db: Session = Depen
     existing = find_rating_for_subject(db, placement.id, user, anon_subject)
     if existing:
         return redirect_with_flash(
-            f"/nilai/{placement.id}", "Anda sudah mempunyai rating untuk kursi di lokasi ini. Gunakan fitur koreksi."
+            f"/nilai/{placement.id}",
+            "Anda sudah mempunyai rating untuk kursi di lokasi ini. Gunakan fitur koreksi.",
         )
     rating = models.Rating(
         placement_id=placement.id,
@@ -155,7 +168,9 @@ async def submit_rating(placement_id: str, request: Request, db: Session = Depen
     db.flush()
     rating.pending_version_id = version.id
     for area_id, stars in scores:
-        db.add(models.RatingAreaScore(rating_version_id=version.id, body_area_id=area_id, stars=stars))
+        db.add(
+            models.RatingAreaScore(rating_version_id=version.id, body_area_id=area_id, stars=stars)
+        )
     try:
         db.commit()
     except IntegrityError:
@@ -163,7 +178,8 @@ async def submit_rating(placement_id: str, request: Request, db: Session = Depen
         # constraint kept only one, so treat this as a duplicate rating.
         db.rollback()
         return redirect_with_flash(
-            f"/nilai/{placement.id}", "Anda sudah mempunyai rating untuk kursi di lokasi ini. Gunakan fitur koreksi."
+            f"/nilai/{placement.id}",
+            "Anda sudah mempunyai rating untuk kursi di lokasi ini. Gunakan fitur koreksi.",
         )
     response = redirect_with_flash(
         f"/nilai/{placement.id}", "Rating terkirim dan menunggu pemeriksaan admin sebelum dihitung."
@@ -186,14 +202,20 @@ async def correct_rating(rating_id: str, request: Request, db: Session = Depends
     if not owns:
         raise HTTPException(403, "Rating ini bukan milik Anda")
     placement = rating.placement
-    if not placement.is_published or not placement.spot.is_published or not placement.spot.venue.is_published:
+    if (
+        not placement.is_published
+        or not placement.spot.is_published
+        or not placement.spot.venue.is_published
+    ):
         raise HTTPException(404, "Rating untuk penempatan ini belum dibuka")
     try:
         usage_date, scores = await parse_rating_scores(request, placement)
     except HTTPException as exc:
         if exc.status_code != 400:
             raise
-        return render_rating_page(request, db, placement, error=exc.detail, submitted=dict(await request.form()))
+        return render_rating_page(
+            request, db, placement, error=exc.detail, submitted=dict(await request.form())
+        )
 
     pending = rating.pending_version
     if pending and not rating.active_version:
@@ -202,9 +224,15 @@ async def correct_rating(rating_id: str, request: Request, db: Session = Depends
             db.delete(old)
         db.flush()
         for area_id, stars in scores:
-            db.add(models.RatingAreaScore(rating_version_id=pending.id, body_area_id=area_id, stars=stars))
+            db.add(
+                models.RatingAreaScore(
+                    rating_version_id=pending.id, body_area_id=area_id, stars=stars
+                )
+            )
         db.commit()
-        return redirect_with_flash(f"/nilai/{placement.id}", "Rating yang masih menunggu pemeriksaan telah diperbarui.")
+        return redirect_with_flash(
+            f"/nilai/{placement.id}", "Rating yang masih menunggu pemeriksaan telah diperbarui."
+        )
     if pending:
         return redirect_with_flash(
             f"/nilai/{placement.id}", "Koreksi sebelumnya masih menunggu pemeriksaan."
@@ -215,13 +243,20 @@ async def correct_rating(rating_id: str, request: Request, db: Session = Depends
     db.flush()
     rating.pending_version_id = version.id
     for area_id, stars in scores:
-        db.add(models.RatingAreaScore(rating_version_id=version.id, body_area_id=area_id, stars=stars))
+        db.add(
+            models.RatingAreaScore(rating_version_id=version.id, body_area_id=area_id, stars=stars)
+        )
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        return redirect_with_flash(f"/nilai/{placement.id}", "Koreksi sebelumnya masih menunggu pemeriksaan.")
-    return redirect_with_flash(f"/nilai/{placement.id}", "Koreksi terkirim. Rating lama tetap dihitung sampai koreksi disetujui.")
+        return redirect_with_flash(
+            f"/nilai/{placement.id}", "Koreksi sebelumnya masih menunggu pemeriksaan."
+        )
+    return redirect_with_flash(
+        f"/nilai/{placement.id}",
+        "Koreksi terkirim. Rating lama tetap dihitung sampai koreksi disetujui.",
+    )
 
 
 @router.post("/ratings/{rating_id}/hapus")
@@ -249,7 +284,9 @@ async def delete_rating(rating_id: str, request: Request, db: Session = Depends(
     )
     db.delete(rating)
     db.commit()
-    return redirect_with_flash(f"/nilai/{placement_id}", "Rating Anda dihapus dan tidak lagi dihitung.")
+    return redirect_with_flash(
+        f"/nilai/{placement_id}", "Rating Anda dihapus dan tidak lagi dihitung."
+    )
 
 
 @router.get("/akun/rating-saya")
@@ -259,7 +296,9 @@ def my_ratings(request: Request, db: Session = Depends(get_db)):
         return response
     ratings = list(
         db.scalars(
-            select(models.Rating).where(models.Rating.user_id == user.id).order_by(models.Rating.updated_at.desc())
+            select(models.Rating)
+            .where(models.Rating.user_id == user.id)
+            .order_by(models.Rating.updated_at.desc())
         ).all()
     )
     return render(request, "my_ratings.html", {"ratings": ratings}, db)

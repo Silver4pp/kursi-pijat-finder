@@ -19,8 +19,8 @@ def test_main_can_be_run_as_a_script_from_another_directory(tmp_path):
     script = Path(__file__).resolve().parents[1] / "app" / "main.py"
     code = (
         "import runpy, sys; from unittest.mock import patch; "
-        "exec('with patch(\\\"uvicorn.run\\\") as run:\\n"
-        " runpy.run_path(sys.argv[1], run_name=\\\"__main__\\\")\\n"
+        'exec(\'with patch(\\"uvicorn.run\\") as run:\\n'
+        ' runpy.run_path(sys.argv[1], run_name=\\"__main__\\")\\n'
         " assert run.call_count == 1')"
     )
     result = subprocess.run(
@@ -52,9 +52,7 @@ def login(client: TestClient, email: str, password: str):
 def placement_id_by_spot(spot_slug: str):
     with SessionLocal() as db:
         return db.scalar(
-            select(models.Placement.id)
-            .join(models.Spot)
-            .where(models.Spot.slug == spot_slug)
+            select(models.Placement.id).join(models.Spot).where(models.Spot.slug == spot_slug)
         )
 
 
@@ -72,19 +70,26 @@ def test_home_includes_polished_explorer_controls():
         assert 'data-view-target="map"' in page
         assert 'data-view-target="list"' in page
         assert 'id="map-loading"' in page
-        assert 'Leaflet.markercluster/leaflet.markercluster.js' in page
-        assert 'Lingkaran: jumlah gedung' in page
+        assert "Leaflet.markercluster/leaflet.markercluster.js" in page
+        assert "Lingkaran: jumlah gedung" in page
         assert 'id="search-status"' in page
         assert 'class="social-sidebar"' in page
         assert 'id="explorer" data-view="list"' in page
-        assert 'Terapkan filter' in page
-        assert 'bukan kursi yang sedang kosong' in page
+        assert "Terapkan filter" in page
+        assert "bukan kursi yang sedang kosong" in page
         assert 'data-view-target="list" aria-pressed="true"' in page
 
 
 def test_shared_navigation_on_public_and_admin_pages():
     with TestClient(app) as client:
-        for path in ("/", "/merk", "/tentang-data", "/masuk", "/daftar", "/venue/stasiun-demo-jakarta"):
+        for path in (
+            "/",
+            "/merk",
+            "/tentang-data",
+            "/masuk",
+            "/daftar",
+            "/venue/stasiun-demo-jakarta",
+        ):
             page = client.get(path)
             assert page.status_code == 200
             assert 'class="social-sidebar"' in page.text
@@ -120,7 +125,9 @@ def test_private_facility_hidden_until_direct_search_or_access_filter():
 
         direct_names = [
             v["name"]
-            for v in client.get("/api/v1/venues", params={"q": "Gedung Kantor Demo"}).json()["venues"]
+            for v in client.get("/api/v1/venues", params={"q": "Gedung Kantor Demo"}).json()[
+                "venues"
+            ]
         ]
         assert "Gedung Kantor Demo" in direct_names
 
@@ -137,7 +144,9 @@ def test_rating_threshold_and_unsupported_areas():
         assert "4,5" in back_only
         assert "berdasarkan 6 penilai" in back_only
         assert back_only.count("Tidak ada fitur") == 6
-        assert len(re.findall(r'name="score_', back_only)) == 6  # five stars plus an explicit unrated choice
+        assert (
+            len(re.findall(r'name="score_', back_only)) == 6
+        )  # five stars plus an explicit unrated choice
 
         full_body = client.get(f"/nilai/{placement_id_by_spot('area-makan-selatan')}").text
         assert "Lokasi ini mempunyai 3 penilai" in full_body
@@ -153,15 +162,11 @@ def test_anonymous_rating_moderation_and_duplicate_prevention():
             "usage_date": "2026-11-02",
             f"score_{body_area_id('punggung')}": "5",
         }
-        submitted = anonymous.post(
-            f"/nilai/{placement_id}", data=payload, follow_redirects=True
-        )
+        submitted = anonymous.post(f"/nilai/{placement_id}", data=payload, follow_redirects=True)
         assert "menunggu pemeriksaan admin" in submitted.text
         assert "Lokasi ini mempunyai 3 penilai" in anonymous.get(f"/nilai/{placement_id}").text
 
-        duplicate = anonymous.post(
-            f"/nilai/{placement_id}", data=payload, follow_redirects=True
-        )
+        duplicate = anonymous.post(f"/nilai/{placement_id}", data=payload, follow_redirects=True)
         assert "sudah mempunyai rating" in duplicate.text
 
     with TestClient(app) as admin:
@@ -430,12 +435,19 @@ def test_invalid_rating_and_correction_return_to_form_and_preserve_values():
         assert "rating-form" in invalid.text
         assert "application/json" not in invalid.headers["content-type"]
 
-        invalid_date = client.post(f"/nilai/{placement_id}", data={**payload, "usage_date": "2026-10-01", f"score_{area_id}": "4"})
+        invalid_date = client.post(
+            f"/nilai/{placement_id}",
+            data={**payload, "usage_date": "2026-10-01", f"score_{area_id}": "4"},
+        )
         assert invalid_date.status_code == 400
         assert "sebelum penempatan ini" in invalid_date.text
         assert re.search(rf'id="new-{area_id}-4"[^>]*checked', invalid_date.text)
 
-        submitted = client.post(f"/nilai/{placement_id}", data={**payload, f"score_{area_id}": "4"}, follow_redirects=True)
+        submitted = client.post(
+            f"/nilai/{placement_id}",
+            data={**payload, f"score_{area_id}": "4"},
+            follow_redirects=True,
+        )
         rating_id = re.search(r"/ratings/([^/]+)/koreksi", submitted.text).group(1)
         correction = client.post(f"/ratings/{rating_id}/koreksi", data=payload)
         assert correction.status_code == 400
@@ -443,7 +455,9 @@ def test_invalid_rating_and_correction_return_to_form_and_preserve_values():
         assert 'value="2026-11-02"' in correction.text
         assert re.search(rf'id="correct-{area_id}-0"[^>]*checked', correction.text)
 
-        rejected_csrf = client.post(f"/nilai/{placement_id}", data={**payload, "csrf_token": "wrong"})
+        rejected_csrf = client.post(
+            f"/nilai/{placement_id}", data={**payload, "csrf_token": "wrong"}
+        )
         assert rejected_csrf.status_code == 403
 
 
@@ -457,7 +471,14 @@ def test_hidden_placements_cannot_receive_public_ratings():
         with TestClient(app) as client:
             client.get("/")
             assert client.get(f"/nilai/{placement_id}").status_code == 404
-            response = client.post(f"/nilai/{placement_id}", data={"csrf_token": csrf(client), "usage_date": "2026-11-02", f"score_{body_area_id('punggung')}": "5"})
+            response = client.post(
+                f"/nilai/{placement_id}",
+                data={
+                    "csrf_token": csrf(client),
+                    "usage_date": "2026-11-02",
+                    f"score_{body_area_id('punggung')}": "5",
+                },
+            )
             assert response.status_code == 404
     finally:
         with SessionLocal() as db:
@@ -468,25 +489,38 @@ def test_hidden_placements_cannot_receive_public_ratings():
 def test_combined_placement_filters_match_the_same_chairs():
     with SessionLocal() as db:
         spot = db.scalar(select(models.Spot).where(models.Spot.slug == "area-tunggu-utara"))
-        other_type = db.scalar(select(models.ChairType).where(models.ChairType.name == "Tipe Punggung dan Kaki"))
+        other_type = db.scalar(
+            select(models.ChairType).where(models.ChairType.name == "Tipe Punggung dan Kaki")
+        )
         first_placement = spot.placements[0]
         venue_id = spot.venue_id
         original_brand_id = first_placement.brand_id
         other_brand_id = other_type.brand_id
-        extra = models.Placement(spot_id=spot.id, brand_id=other_type.brand_id, chair_type_id=other_type.id,
-                                 quantity=5, payment_methods="e_money", cost_type="berbayar_per_sesi")
+        extra = models.Placement(
+            spot_id=spot.id,
+            brand_id=other_type.brand_id,
+            chair_type_id=other_type.id,
+            quantity=5,
+            payment_methods="e_money",
+            cost_type="berbayar_per_sesi",
+        )
         db.add(extra)
         db.commit()
         extra_id = extra.id
     try:
         with TestClient(app) as client:
+
             def slugs(**params):
                 result = client.get(f"/api/v1/venues/{venue_id}/spots", params=params).json()
                 return [spot["slug"] for spot in result["spots"]]
 
             assert "area-tunggu-utara" not in slugs(brand_id=other_brand_id, payment="qris")
-            assert "area-tunggu-utara" not in slugs(brand_id=original_brand_id, payment="qris", min_qty="4")
-            assert "area-tunggu-utara" in slugs(brand_id=other_brand_id, payment="e_money", min_qty="5")
+            assert "area-tunggu-utara" not in slugs(
+                brand_id=original_brand_id, payment="qris", min_qty="4"
+            )
+            assert "area-tunggu-utara" in slugs(
+                brand_id=other_brand_id, payment="e_money", min_qty="5"
+            )
     finally:
         with SessionLocal() as db:
             db.delete(db.get(models.Placement, extra_id))
@@ -508,7 +542,11 @@ def test_login_rate_limit_blocks_repeated_attempts(monkeypatch):
         client.get("/masuk")
         blocked = client.post(
             "/masuk",
-            data={"csrf_token": csrf(client), "email": "admin@example.com", "password": "Admin123!"},
+            data={
+                "csrf_token": csrf(client),
+                "email": "admin@example.com",
+                "password": "Admin123!",
+            },
         )
         assert blocked.status_code == 429
         assert "Terlalu banyak percobaan masuk" in blocked.text
@@ -517,16 +555,29 @@ def test_login_rate_limit_blocks_repeated_attempts(monkeypatch):
 def test_register_rejects_mismatched_or_weak_password():
     with TestClient(app) as client:
         client.get("/daftar")
-        base = {"csrf_token": csrf(client), "name": "Penguji Daftar", "email": "penguji@example.com"}
-        mismatch = client.post("/daftar", data={**base, "password": "Sandal99", "confirm": "Sandal98"})
+        base = {
+            "csrf_token": csrf(client),
+            "name": "Penguji Daftar",
+            "email": "penguji@example.com",
+        }
+        mismatch = client.post(
+            "/daftar", data={**base, "password": "Sandal99", "confirm": "Sandal98"}
+        )
         assert mismatch.status_code == 400
         assert "Konfirmasi kata sandi tidak sama" in mismatch.text
 
-        weak = client.post("/daftar", data={**base, "password": "sandalyangpanjang", "confirm": "sandalyangpanjang"})
+        weak = client.post(
+            "/daftar",
+            data={**base, "password": "sandalyangpanjang", "confirm": "sandalyangpanjang"},
+        )
         assert weak.status_code == 400
         assert "huruf dan angka" in weak.text
 
-        ok = client.post("/daftar", data={**base, "password": "Sandal99", "confirm": "Sandal99"}, follow_redirects=False)
+        ok = client.post(
+            "/daftar",
+            data={**base, "password": "Sandal99", "confirm": "Sandal99"},
+            follow_redirects=False,
+        )
         assert ok.status_code == 303
 
 
@@ -538,7 +589,10 @@ def test_unpublished_venue_hides_spot_detail_and_type_listing():
     try:
         with TestClient(app) as client:
             assert client.get("/venue/mall-demo-selatan").status_code == 404
-            assert client.get("/venue/mall-demo-selatan/titik/dekat-eskalator-timur").status_code == 404
+            assert (
+                client.get("/venue/mall-demo-selatan/titik/dekat-eskalator-timur").status_code
+                == 404
+            )
             names = [v["name"] for v in client.get("/api/v1/venues").json()["venues"]]
             assert "Mall Demo Selatan" not in names
             type_page = client.get("/merk/merk-aruna-contoh/tipe-seluruh-badan-dua")
@@ -553,7 +607,9 @@ def test_unpublished_venue_hides_spot_detail_and_type_listing():
 
 def test_create_proposal_rejects_unknown_existence_status():
     with SessionLocal() as db:
-        venue_id = db.scalar(select(models.Venue.id).where(models.Venue.slug == "mall-demo-selatan"))
+        venue_id = db.scalar(
+            select(models.Venue.id).where(models.Venue.slug == "mall-demo-selatan")
+        )
     with TestClient(app) as petugas:
         login(petugas, "petugas@example.com", "Petugas123!")
         petugas.get("/internal/usulan-baru")
@@ -621,7 +677,11 @@ def test_rejected_proposal_discards_staged_photo():
         login(admin, "admin@example.com", "Admin123!")
         rejected = admin.post(
             f"/admin/usulan/{change_id}/keputusan",
-            data={"csrf_token": csrf(admin), "action": "reject", "review_note": "Data kurang jelas."},
+            data={
+                "csrf_token": csrf(admin),
+                "action": "reject",
+                "review_note": "Data kurang jelas.",
+            },
             follow_redirects=True,
         )
         assert "ditolak" in rejected.text
@@ -640,7 +700,11 @@ def test_owner_can_delete_their_own_rating():
         user.get(f"/nilai/{placement_id}")
         submitted = user.post(
             f"/nilai/{placement_id}",
-            data={"csrf_token": csrf(user), "usage_date": "2026-11-02", f"score_{punggung_id}": "4"},
+            data={
+                "csrf_token": csrf(user),
+                "usage_date": "2026-11-02",
+                f"score_{punggung_id}": "4",
+            },
             follow_redirects=True,
         )
         assert "menunggu pemeriksaan admin" in submitted.text
@@ -678,10 +742,7 @@ def _create_venue_with_spot(db, index: int):
         )
         db.add(venue)
         db.flush()
-    if (
-        db.scalar(select(models.Spot).where(models.Spot.slug == f"paginasi-spot-{index}"))
-        is None
-    ):
+    if db.scalar(select(models.Spot).where(models.Spot.slug == f"paginasi-spot-{index}")) is None:
         db.add(
             models.Spot(
                 venue_id=venue.id,
@@ -703,7 +764,7 @@ def test_home_pagination_spans_two_pages():
 
     with TestClient(app) as client:
         page1 = client.get("/").text
-        assert "class=\"pager\"" in page1
+        assert 'class="pager"' in page1
         assert "Berikutnya" in page1
         assert "Halaman 1 dari 2" in page1
 
@@ -902,6 +963,7 @@ def test_suggest_api():
         wildcard = client.get("/api/v1/suggest", params={"q": "%"}).json()
         assert wildcard["venues"] == []
 
+
 def test_create_location_normalises_comma_coordinates():
     with SessionLocal() as db:
         admin = db.scalar(select(models.User).where(models.User.email == "admin@example.com"))
@@ -1042,11 +1104,7 @@ def test_type_rating_summary_ignores_placements_in_hidden_venues():
         db.add(version)
         db.flush()
         rating.active_version_id = version.id
-        db.add(
-            models.RatingAreaScore(
-                rating_version_id=version.id, body_area_id=area.id, stars=5
-            )
-        )
+        db.add(models.RatingAreaScore(rating_version_id=version.id, body_area_id=area.id, stars=5))
         db.commit()
 
         after = {
@@ -1058,9 +1116,7 @@ def test_type_rating_summary_ignores_placements_in_hidden_venues():
 
 def test_venue_spots_api_hides_unpublished_venue():
     with SessionLocal() as db:
-        venue = db.scalar(
-            select(models.Venue).where(models.Venue.slug == "venue-tersembunyi-api")
-        )
+        venue = db.scalar(select(models.Venue).where(models.Venue.slug == "venue-tersembunyi-api"))
         if venue is None:
             venue = models.Venue(
                 name="Venue Tersembunyi API",
@@ -1213,9 +1269,7 @@ def test_home_pagination_handles_zero_and_negative_pages():
 
 def test_private_spot_is_not_exposed_on_public_pages():
     with TestClient(app) as client:
-        detail = client.get(
-            "/venue/gedung-kantor-demo/titik/ruang-istirahat-karyawan"
-        )
+        detail = client.get("/venue/gedung-kantor-demo/titik/ruang-istirahat-karyawan")
         assert detail.status_code == 404
 
         venue_page = client.get("/venue/gedung-kantor-demo")
@@ -1246,8 +1300,10 @@ def test_runtime_config_blocks_insecure_production(monkeypatch):
 def test_runtime_config_rejects_sameSite_none_without_secure_cookie(monkeypatch):
     monkeypatch.setattr(config, "COOKIE_SAMESITE", "none")
     monkeypatch.setattr(config, "COOKIE_SECURE", False)
-    assert any("SameSite=none" in problem or "COOKIE_SAMESITE=none" in problem
-               for problem in config.validate_runtime_config())
+    assert any(
+        "SameSite=none" in problem or "COOKIE_SAMESITE=none" in problem
+        for problem in config.validate_runtime_config()
+    )
 
 
 def test_upload_path_rejects_unsafe_names():

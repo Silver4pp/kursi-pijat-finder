@@ -40,14 +40,22 @@ RATE_LIMIT_WINDOW_MINUTES = _env_int("RATE_LIMIT_WINDOW_MINUTES", 15)
 # Only trust X-Forwarded-For when the direct peer is a proxy we control;
 # otherwise the header is user input and lets clients rotate rate-limit keys.
 # Comma-separated list, e.g. TRUSTED_PROXIES="10.0.0.1,10.0.0.2".
-TRUSTED_PROXIES = {
-    ip.strip() for ip in os.getenv("TRUSTED_PROXIES", "").split(",") if ip.strip()
-}
+TRUSTED_PROXIES = {ip.strip() for ip in os.getenv("TRUSTED_PROXIES", "").split(",") if ip.strip()}
 
 # Staged proposal photos that were never reviewed are deleted after this many days.
 STAGED_PHOTO_TTL_DAYS = _env_int("STAGED_PHOTO_TTL_DAYS", 30)
 
+# Level for the application logger. Uvicorn configures only its own loggers, so the
+# app has to install its own handler or logger.info() is dropped on the floor.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip().upper() or "INFO"
+
+# Bind address for `python app/main.py`. Uvicorn started from the CLI takes its
+# own --host/--port, so these only apply to the direct-entry path.
+HOST = os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1"
+PORT = _env_int("PORT", 8000)
+
 _VALID_SAMESITE = {"lax", "strict", "none"}
+_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 
 def validate_runtime_config() -> list[str]:
@@ -74,6 +82,10 @@ def validate_runtime_config() -> list[str]:
         )
     if STAGED_PHOTO_TTL_DAYS <= 0:
         problems.append("STAGED_PHOTO_TTL_DAYS must be greater than 0.")
+    if not 1 <= PORT <= 65535:
+        problems.append(f"PORT must be between 1 and 65535, got {PORT}.")
+    if LOG_LEVEL not in _VALID_LOG_LEVELS:
+        problems.append(f"LOG_LEVEL must be one of {sorted(_VALID_LOG_LEVELS)}, got {LOG_LEVEL!r}.")
 
     if IS_PRODUCTION:
         if not COOKIE_SECURE:

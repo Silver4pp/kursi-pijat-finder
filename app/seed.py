@@ -301,7 +301,9 @@ def seed_database(db: Session) -> None:
             operator_id=operator.id,
             quantity=quantity,
             quantity_basis="kunjungan" if quantity else None,
-            cost_type="termasuk_fasilitas" if is_free else ("berbayar_per_sesi" if price else "belum_diketahui"),
+            cost_type="termasuk_fasilitas"
+            if is_free
+            else ("berbayar_per_sesi" if price else "belum_diketahui"),
             tariff_type="paket_tetap" if price else None,
             price_idr=price,
             duration_minutes=duration,
@@ -323,7 +325,10 @@ def seed_database(db: Session) -> None:
                 check_method="kunjungan",
                 confidence="kuat",
                 fields_supported="keberadaan;lantai;patokan;akses",
-                notes="Baris demonstrasi. Ganti dengan hasil pemeriksaan nyata sebelum dipakai publik.",
+                notes=(
+                    "Baris demonstrasi. Ganti dengan hasil pemeriksaan nyata "
+                    "sebelum dipakai publik."
+                ),
             )
         )
 

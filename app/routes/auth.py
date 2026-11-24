@@ -65,14 +65,24 @@ async def login(request: Request, db: Session = Depends(get_db)):
         # Burn the same PBKDF2 work for unknown emails so response time does not
         # reveal which addresses are registered.
         _verify_dummy_password(password)
-        return render(request, "login.html", {"error": "Email atau kata sandi tidak cocok."}, db, 400)
+        return render(
+            request, "login.html", {"error": "Email atau kata sandi tidak cocok."}, db, 400
+        )
     raw = new_token()
-    db.add(models.Session(user_id=user.id, token_hash=token_hash(raw), expires_at=session_expiry(config.SESSION_COOKIE_DAYS)))
+    db.add(
+        models.Session(
+            user_id=user.id,
+            token_hash=token_hash(raw),
+            expires_at=session_expiry(config.SESSION_COOKIE_DAYS),
+        )
+    )
     db.commit()
     response = redirect_with_flash("/", f"Selamat datang, {user.name}.")
     set_cookie(response, SESSION_COOKIE, raw, max_age=60 * 60 * 24 * config.SESSION_COOKIE_DAYS)
     # Rotate the CSRF token so any token issued before authentication expires.
-    set_cookie(response, CSRF_COOKIE, new_token(), max_age=60 * 60 * 24 * config.SESSION_COOKIE_DAYS)
+    set_cookie(
+        response, CSRF_COOKIE, new_token(), max_age=60 * 60 * 24 * config.SESSION_COOKIE_DAYS
+    )
     return response
 
 
@@ -114,14 +124,22 @@ async def register(request: Request, db: Session = Depends(get_db)):
             400,
         )
     if password != confirm:
-        return render(request, "register.html", {"error": "Konfirmasi kata sandi tidak sama."}, db, 400)
+        return render(
+            request, "register.html", {"error": "Konfirmasi kata sandi tidak sama."}, db, 400
+        )
     if db.scalar(select(models.User).where(models.User.email == email)):
         return render(request, "register.html", {"error": "Email sudah digunakan."}, db, 400)
     user = models.User(name=name, email=email, password_hash=hash_password(password), role="public")
     db.add(user)
     db.flush()
     raw = new_token()
-    db.add(models.Session(user_id=user.id, token_hash=token_hash(raw), expires_at=session_expiry(config.SESSION_COOKIE_DAYS)))
+    db.add(
+        models.Session(
+            user_id=user.id,
+            token_hash=token_hash(raw),
+            expires_at=session_expiry(config.SESSION_COOKIE_DAYS),
+        )
+    )
     try:
         db.commit()
     except IntegrityError:
@@ -130,7 +148,9 @@ async def register(request: Request, db: Session = Depends(get_db)):
         return render(request, "register.html", {"error": "Email sudah digunakan."}, db, 400)
     response = redirect_with_flash("/", "Akun berhasil dibuat.")
     set_cookie(response, SESSION_COOKIE, raw, max_age=60 * 60 * 24 * config.SESSION_COOKIE_DAYS)
-    set_cookie(response, CSRF_COOKIE, new_token(), max_age=60 * 60 * 24 * config.SESSION_COOKIE_DAYS)
+    set_cookie(
+        response, CSRF_COOKIE, new_token(), max_age=60 * 60 * 24 * config.SESSION_COOKIE_DAYS
+    )
     return response
 
 
@@ -140,7 +160,9 @@ async def logout(request: Request, db: Session = Depends(get_db)):
     check_csrf(request, str(form.get("csrf_token") or ""))
     raw = request.cookies.get(SESSION_COOKIE)
     if raw:
-        session = db.scalar(select(models.Session).where(models.Session.token_hash == token_hash(raw)))
+        session = db.scalar(
+            select(models.Session).where(models.Session.token_hash == token_hash(raw))
+        )
         if session:
             db.delete(session)
             db.commit()

@@ -138,10 +138,16 @@ class Spot(Base):
 
     venue = relationship("Venue", back_populates="spots")
     placements = relationship("Placement", back_populates="spot", cascade="all, delete-orphan")
-    access_groups = relationship("AccessGroup", secondary=spot_access_groups, back_populates="spots")
+    access_groups = relationship(
+        "AccessGroup", secondary=spot_access_groups, back_populates="spots"
+    )
     photos = relationship("Photo", back_populates="spot", cascade="all, delete-orphan")
-    public_events = relationship("PublicChangeEvent", back_populates="spot", cascade="all, delete-orphan")
-    verification_logs = relationship("VerificationLog", back_populates="spot", cascade="all, delete-orphan")
+    public_events = relationship(
+        "PublicChangeEvent", back_populates="spot", cascade="all, delete-orphan"
+    )
+    verification_logs = relationship(
+        "VerificationLog", back_populates="spot", cascade="all, delete-orphan"
+    )
 
     @property
     def access_codes(self):
@@ -199,7 +205,9 @@ class ChairType(Base):
     notes = Column(Text, nullable=True)
 
     brand = relationship("Brand", back_populates="chair_types")
-    body_areas = relationship("ChairTypeBodyArea", back_populates="chair_type", cascade="all, delete-orphan")
+    body_areas = relationship(
+        "ChairTypeBodyArea", back_populates="chair_type", cascade="all, delete-orphan"
+    )
     placements = relationship("Placement", back_populates="chair_type")
 
     @property
@@ -210,9 +218,7 @@ class ChairType(Base):
 
 class ChairTypeBodyArea(Base):
     __tablename__ = "chair_type_body_areas"
-    __table_args__ = (
-        UniqueConstraint("chair_type_id", "body_area_id", name="uq_type_body_area"),
-    )
+    __table_args__ = (UniqueConstraint("chair_type_id", "body_area_id", name="uq_type_body_area"),)
 
     id = Column(String, primary_key=True, default=new_id)
     chair_type_id = Column(String, ForeignKey("chair_types.id"), nullable=False, index=True)
@@ -265,7 +271,12 @@ class Placement(Base):
 
     @property
     def can_rate(self):
-        return bool(self.brand_id and self.chair_type_id and self.chair_type and self.chair_type.supported_areas)
+        return bool(
+            self.brand_id
+            and self.chair_type_id
+            and self.chair_type
+            and self.chair_type.supported_areas
+        )
 
 
 class Photo(Base):
@@ -385,7 +396,10 @@ class Rating(Base):
     user = relationship("User", back_populates="ratings")
     anonymous_subject = relationship("AnonymousSubject", back_populates="ratings")
     versions = relationship(
-        "RatingVersion", back_populates="rating", cascade="all, delete-orphan", order_by="RatingVersion.version_no"
+        "RatingVersion",
+        back_populates="rating",
+        cascade="all, delete-orphan",
+        order_by="RatingVersion.version_no",
     )
 
     @property
@@ -395,6 +409,7 @@ class Rating(Base):
     @property
     def pending_version(self):
         return next((v for v in self.versions if v.id == self.pending_version_id), None)
+
 
 class RatingVersion(Base):
     __tablename__ = "rating_versions"

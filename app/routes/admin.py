@@ -39,6 +39,7 @@ def _csv_safe(value):
 def _csv_row(cells):
     return [_csv_safe(cell) for cell in cells]
 
+
 router = APIRouter()
 
 
@@ -100,7 +101,11 @@ def admin_change_detail(change_request_id: str, request: Request, db: Session = 
     return render(
         request,
         "admin_change.html",
-        {"item": item, "payload": payload, "payload_pretty": json.dumps(payload, indent=2, ensure_ascii=False)},
+        {
+            "item": item,
+            "payload": payload,
+            "payload_pretty": json.dumps(payload, indent=2, ensure_ascii=False),
+        },
         db,
     )
 
@@ -114,7 +119,9 @@ async def decide_change(change_request_id: str, request: Request, db: Session = 
     if not item or item.status != "submitted":
         raise HTTPException(404, "Usulan yang menunggu pemeriksaan tidak ditemukan")
     if item.submitter_id == user.id:
-        return redirect_with_flash(f"/admin/usulan/{item.id}", "Admin tidak dapat memeriksa usulannya sendiri.")
+        return redirect_with_flash(
+            f"/admin/usulan/{item.id}", "Admin tidak dapat memeriksa usulannya sendiri."
+        )
     form = await request.form()
     check_csrf(request, str(form.get("csrf_token") or ""))
     action = str(form.get("action") or "")
@@ -131,13 +138,27 @@ async def decide_change(change_request_id: str, request: Request, db: Session = 
     if action == "return":
         item.status = "returned"
         discard_staged_photo(item)
-        services.audit(db, user.id, "change_request", item.id, "change_request_returned", {"note": note or None})
+        services.audit(
+            db,
+            user.id,
+            "change_request",
+            item.id,
+            "change_request_returned",
+            {"note": note or None},
+        )
         db.commit()
         return redirect_with_flash("/admin", "Usulan dikembalikan kepada petugas.")
     if action == "reject":
         item.status = "rejected"
         discard_staged_photo(item)
-        services.audit(db, user.id, "change_request", item.id, "change_request_rejected", {"note": note or None})
+        services.audit(
+            db,
+            user.id,
+            "change_request",
+            item.id,
+            "change_request_rejected",
+            {"note": note or None},
+        )
         db.commit()
         return redirect_with_flash("/admin", "Usulan ditolak.")
     if action != "approve":
@@ -162,7 +183,8 @@ async def decide_change(change_request_id: str, request: Request, db: Session = 
         logger.exception("Gagal menerapkan usulan %s (kind=%s)", item.id, item.kind)
         return redirect_with_flash(
             f"/admin/usulan/{item.id}",
-            "Usulan belum dapat diterapkan karena datanya tidak valid. Pemeriksaan tidak tersimpan.",
+            "Usulan belum dapat diterapkan karena datanya tidak valid. "
+            "Pemeriksaan tidak tersimpan.",
         )
     return redirect_with_flash("/admin", "Usulan disetujui dan data publik diperbarui.")
 
@@ -214,7 +236,9 @@ async def admin_venue_save(venue_id: str, request: Request, db: Session = Depend
         latitude = float(clean("latitude").replace(",", "."))
         longitude = float(clean("longitude").replace(",", "."))
     except ValueError:
-        return redirect_with_flash(f"/admin/venue/{venue.id}/edit", "Lintang dan bujur harus berupa angka.")
+        return redirect_with_flash(
+            f"/admin/venue/{venue.id}/edit", "Lintang dan bujur harus berupa angka."
+        )
     if not -7.0 <= latitude <= -5.0 or not 105.0 <= longitude <= 108.0:
         return redirect_with_flash(
             f"/admin/venue/{venue.id}/edit",
@@ -277,7 +301,9 @@ async def decide_rating(version_id: str, request: Request, db: Session = Depends
     else:
         raise HTTPException(400, "Keputusan tidak dikenali")
     rating.updated_at = datetime.now(UTC)
-    services.audit(db, user.id, "rating", rating.id, f"rating_{version.status}", {"version_id": version.id})
+    services.audit(
+        db, user.id, "rating", rating.id, f"rating_{version.status}", {"version_id": version.id}
+    )
     db.commit()
     return redirect_with_flash("/admin", message)
 
@@ -297,7 +323,9 @@ def admin_export_spots_csv(request: Request, db: Session = Depends(get_db)):
                 selectinload(models.Spot.access_groups),
             )
             .order_by(models.Venue.name, models.Spot.floor, models.Spot.name)
-        ).unique().all()
+        )
+        .unique()
+        .all()
     )
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer)
@@ -331,31 +359,35 @@ def admin_export_spots_csv(request: Request, db: Session = Depends(get_db)):
         for placement in spot.placements:
             if not placement.is_published or placement.effective_to is not None:
                 continue
-            writer.writerow(_csv_row(
-                [
-                    venue.name,
-                    venue.admin_city,
-                    venue.category,
-                    venue.district or "",
-                    venue.latitude,
-                    venue.longitude,
-                    spot.name,
-                    spot.slug,
-                    spot.floor,
-                    spot.zone_landmark or "",
-                    spot.existence_status,
-                    ";".join(sorted(spot.access_codes)),
-                    placement.brand.name if placement.brand else "",
-                    placement.chair_type.name if placement.chair_type else "",
-                    placement.operator.name if placement.operator else "",
-                    placement.quantity if placement.quantity is not None else "",
-                    placement.cost_type,
-                    placement.price_idr if placement.price_idr is not None else "",
-                    placement.duration_minutes if placement.duration_minutes is not None else "",
-                    ";".join(placement.payment_codes),
-                    placement.effective_from.isoformat() if placement.effective_from else "",
-                ]
-            ))
+            writer.writerow(
+                _csv_row(
+                    [
+                        venue.name,
+                        venue.admin_city,
+                        venue.category,
+                        venue.district or "",
+                        venue.latitude,
+                        venue.longitude,
+                        spot.name,
+                        spot.slug,
+                        spot.floor,
+                        spot.zone_landmark or "",
+                        spot.existence_status,
+                        ";".join(sorted(spot.access_codes)),
+                        placement.brand.name if placement.brand else "",
+                        placement.chair_type.name if placement.chair_type else "",
+                        placement.operator.name if placement.operator else "",
+                        placement.quantity if placement.quantity is not None else "",
+                        placement.cost_type,
+                        placement.price_idr if placement.price_idr is not None else "",
+                        placement.duration_minutes
+                        if placement.duration_minutes is not None
+                        else "",
+                        ";".join(placement.payment_codes),
+                        placement.effective_from.isoformat() if placement.effective_from else "",
+                    ]
+                )
+            )
     filename = f"spots-{datetime.now(UTC).date().isoformat()}.csv"
     return Response(
         content=buffer.getvalue().encode("utf-8-sig"),
@@ -381,7 +413,12 @@ def admin_type_edit(chair_type_id: str, request: Request, db: Session = Depends(
     chair_type = db.get(models.ChairType, chair_type_id)
     if not chair_type:
         raise HTTPException(404, "Tipe tidak ditemukan")
-    return render(request, "admin_type_edit.html", {"chair_type": chair_type, "today": datetime.now().date()}, db)
+    return render(
+        request,
+        "admin_type_edit.html",
+        {"chair_type": chair_type, "today": datetime.now().date()},
+        db,
+    )
 
 
 @router.post("/admin/master-tipe/{chair_type_id}")
