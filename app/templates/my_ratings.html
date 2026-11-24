@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon %}
 {% block title %}Rating Saya{% endblock %}
 {% block content %}
 <section class="page-head"><h1>Rating saya</h1><p>Rating anonim dapat dibuka kembali dari halaman penempatan pada browser yang sama.</p></section>
@@ -10,7 +11,13 @@
       <h2>{{ rating.placement.brand.name }} · {{ rating.placement.chair_type.name }}</h2>
       <p>{{ rating.placement.spot.venue.name }}, lantai {{ rating.placement.spot.floor }}</p>
       {% if rating.pending_version %}<p class="status is-wait">Menunggu pemeriksaan</p>{% elif rating.active_version %}<p class="status is-ada">Disetujui</p>{% else %}<p class="status is-tidak">Tidak ada versi aktif</p>{% endif %}
-      <a class="button secondary" href="/nilai/{{ rating.placement.id }}">Lihat atau koreksi</a>
+      <div class="actions">
+        <a class="button secondary" href="/nilai/{{ rating.placement.id }}">Lihat atau koreksi</a>
+        <form method="post" action="/ratings/{{ rating.id }}/hapus" class="inline-form" data-confirm="Hapus rating ini beserta seluruh riwayat versinya? Rating yang sudah disetujui juga akan berhenti dihitung.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="button ghost danger" type="submit">{{ icon('trash-2') }} Hapus</button>
+        </form>
+      </div>
     </article>
   {% endfor %}
   </div>

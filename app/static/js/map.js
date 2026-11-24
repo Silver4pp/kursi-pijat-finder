@@ -124,6 +124,7 @@
   function showPanelLoading() {
     if (panelSubtitle) panelSubtitle.textContent = 'Memuat lantai, patokan, dan kursi…';
     if (panelSpots) {
+      panelSpots.setAttribute('aria-busy', 'true');
       panelSpots.innerHTML = `
         <div class="loading-card" aria-hidden="true">
           <span></span><span></span><span></span>
@@ -165,6 +166,7 @@
       if (activeVenueId !== venue.id) return;
       if (!data.spots.length) {
         if (panelSubtitle) panelSubtitle.textContent = 'Tidak ada titik yang cocok dengan filter saat ini.';
+        panelSpots.removeAttribute('aria-busy');
         panelSpots.innerHTML = `
           <div class="panel-empty">
             <strong>Filter terlalu sempit.</strong>
@@ -177,6 +179,7 @@
         panelSubtitle.textContent = `${data.spots.length} titik ditemukan. Buka detailnya untuk rute, akses, dan rating.`;
       }
 
+      panelSpots.removeAttribute('aria-busy');
       panelSpots.innerHTML = data.spots.map((spot) => `
         <article class="panel-spot">
           <div class="panel-spot-head">
@@ -206,6 +209,7 @@
     } catch (error) {
       if (activeVenueId !== venue.id) return;
       if (panelSubtitle) panelSubtitle.textContent = 'Titik belum dapat dimuat.';
+      panelSpots.removeAttribute('aria-busy');
       panelSpots.innerHTML = `
         <div class="panel-empty">
           <strong>Koneksi atau server sedang bermasalah.</strong>

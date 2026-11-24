@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Table,
@@ -306,6 +307,7 @@ class VerificationLog(Base):
 
 class ChangeRequest(Base):
     __tablename__ = "change_requests"
+    __table_args__ = (Index("ix_change_requests_status", "status"),)
 
     id = Column(String, primary_key=True, default=new_id)
     submitter_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
@@ -395,7 +397,10 @@ class Rating(Base):
 
 class RatingVersion(Base):
     __tablename__ = "rating_versions"
-    __table_args__ = (UniqueConstraint("rating_id", "version_no", name="uq_rating_version_no"),)
+    __table_args__ = (
+        UniqueConstraint("rating_id", "version_no", name="uq_rating_version_no"),
+        Index("ix_rating_versions_status", "status"),
+    )
 
     id = Column(String, primary_key=True, default=new_id)
     rating_id = Column(String, ForeignKey("ratings.id"), nullable=False, index=True)

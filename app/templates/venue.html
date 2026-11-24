@@ -17,6 +17,9 @@
 
   <div class="detail-actions">
     <a class="button primary" href="https://www.google.com/maps/dir/?api=1&destination={{ venue.latitude }},{{ venue.longitude }}" target="_blank" rel="noopener">{{ icon('route') }} Buka rute ke gedung</a>
+    {% if current_user and current_user.role == 'admin' %}
+    <a class="button secondary" href="/admin/venue/{{ venue.id }}/edit">{{ icon('pencil') }} Edit gedung</a>
+    {% endif %}
     <span class="muted small">Setelah sampai, gunakan lantai dan patokan pada detail titik.</span>
   </div>
 </section>

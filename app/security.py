@@ -1,6 +1,9 @@
 import hashlib
 import hmac
 import secrets
+import threading
+import time
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 
 PBKDF2_ITERATIONS = 310_000
@@ -39,3 +42,32 @@ def new_token() -> str:
 
 def session_expiry(days: int = 14):
     return utcnow() + timedelta(days=days)
+
+
+class SlidingWindowLimiter:
+    """Small in-process sliding-window rate limiter keyed by arbitrary strings.
+
+    Suitable for single-process deployments; a shared store is needed when the
+    app runs behind several workers.
+    """
+
+    def __init__(self, max_events: int, window_seconds: float):
+        self.max_events = max_events
+        self.window_seconds = window_seconds
+        self._events: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def allow(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            if len(self._events) > 4096:
+                for stale in [k for k, v in self._events.items() if not v]:
+                    del self._events[stale]
+            events = self._events[key]
+            cutoff = now - self.window_seconds
+            while events and events[0] <= cutoff:
+                events.popleft()
+            if len(events) >= self.max_events:
+                return False
+            events.append(now)
+            return True

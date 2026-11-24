@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Edit gedung: {{ venue.name }}{% endblock %}
+{% block content %}
+<section class="page-head narrow">
+  <a class="back-link" href="/venue/{{ venue.slug }}">Lihat halaman publik gedung</a>
+  <p class="eyebrow">Admin</p>
+  <h1>Edit gedung</h1>
+  <p>Perubahan langsung berlaku pada halaman publik dan hasil pencarian.</p>
+</section>
+
+<form method="post" action="/admin/venue/{{ venue.id }}/edit" class="form-sheet narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="form-grid">
+    <label class="wide"><span>Nama gedung</span><input name="name" value="{{ venue.name }}" required></label>
+    <label><span>Kategori</span><select name="category">{% for code, label in categories.items() %}<option value="{{ code }}" {% if venue.category == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label><span>Kota administratif</span><select name="admin_city">{% for city in cities %}<option {% if venue.admin_city == city %}selected{% endif %}>{{ city }}</option>{% endfor %}</select></label>
+    <label class="wide"><span>Alamat</span><input name="address" value="{{ venue.address }}" required></label>
+    <label><span>Kecamatan</span><input name="district" value="{{ venue.district or '' }}"></label>
+    <label><span>Jam buka</span><input name="opening_hours" value="{{ venue.opening_hours or '' }}" placeholder="Mis. 09:00-21:00"></label>
+    <label><span>Lintang</span><input name="latitude" value="{{ venue.latitude }}" inputmode="decimal" required></label>
+    <label><span>Bujur</span><input name="longitude" value="{{ venue.longitude }}" inputmode="decimal" required></label>
+  </div>
+  <label class="check-row"><input type="checkbox" name="is_published" value="1" {% if venue.is_published %}checked{% endif %}> Terbitkan gedung ini ke publik</label>
+  <button class="button primary" type="submit">{{ icon('pencil') }} Simpan perubahan</button>
+</form>
+{% endblock %}

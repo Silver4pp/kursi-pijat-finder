@@ -33,3 +33,9 @@ Thumbs.db
 # Build artifacts
 build/
 dist/
+
+# Build testing
+tests/
+
+# Build Workflow
+.github/

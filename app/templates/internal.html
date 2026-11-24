@@ -11,12 +11,18 @@
 
 <section class="content-section">
   <h2>Usulan saya</h2>
+  <div class="filter-chips" role="group" aria-label="Filter status usulan">
+    <a class="chip {% if not status_filter %}is-active{% endif %}" href="/internal">Semua ({{ total_requests }})</a>
+    {% for code, label in status_labels.items() %}
+      <a class="chip {% if status_filter == code %}is-active{% endif %}" href="/internal?status={{ code }}">{{ label }} ({{ status_counts.get(code, 0) }})</a>
+    {% endfor %}
+  </div>
   {% if my_requests %}
   <div class="table-like">
     {% for item in my_requests %}
     <div class="table-row">
       <span><strong>{{ 'Lokasi baru' if item.kind == 'create_location' else 'Perubahan titik' }}</strong><small>Dibuat {{ item.created_at.strftime('%d-%m-%Y %H:%M') }}</small></span>
-      <span class="badge">{{ item.status }}</span>
+      <span class="badge badge-{{ item.status }}">{{ status_labels.get(item.status, item.status) }}</span>
       <span>{{ item.review_note or '-' }}</span>
     </div>
     {% endfor %}

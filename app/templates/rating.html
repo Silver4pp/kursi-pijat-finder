@@ -31,17 +31,17 @@
         <span>Fitur belum dikonfirmasi. Area ini belum dinilai.</span>
       {% elif row.show_local %}
         <span><strong class="score-number num">{{ format_decimal(row.local.average) }}</strong> <span class="muted">dari 5</span></span>
-        <span class="meter" aria-hidden="true"><span style="width: {{ ((row.local.average or 0) / 5 * 100) | round(0) }}%"></span></span>
+        <progress class="meter" max="5" value="{{ row.local.average or 0 }}" aria-hidden="true"></progress>
         <span>berdasarkan {{ row.local.count }} penilai.</span>
         <small>Sumber: {{ row.local.account_count }} akun · {{ row.local.anonymous_count }} anonim.</small>
       {% elif row.show_global %}
         <span class="meter-label">Kemajuan lokasi ini: {{ row.local.count }} dari 5 penilai</span>
-        <span class="meter is-progress" aria-hidden="true"><span style="width: {{ (row.local.count / 5 * 100) | round(0) }}%"></span></span>
+        <progress class="meter is-progress" max="5" value="{{ row.local.count }}" aria-hidden="true"></progress>
         <span>Lokasi ini mempunyai {{ row.local.count }} dari 5 penilai minimum. Sebagai pembanding, semua lokasi {{ placement.chair_type.name }} memiliki rata-rata <strong class="num">{{ format_decimal(row.global.average) }}</strong> dari 5 berdasarkan {{ row.global.count }} penilai.</span>
         <small>Pembanding semua lokasi: {{ row.global.account_count }} akun · {{ row.global.anonymous_count }} anonim.</small>
       {% else %}
         <span class="meter-label">Kemajuan menuju rata-rata lokasi</span>
-        <span class="meter is-progress" aria-hidden="true"><span style="width: {{ (row.local.count / 5 * 100) | round(0) }}%"></span></span>
+        <progress class="meter is-progress" max="5" value="{{ row.local.count }}" aria-hidden="true"></progress>
         <span>Rata-rata ditampilkan setelah 5 penilai terverifikasi. Lokasi ini mempunyai {{ row.local.count }} penilai; seluruh lokasi tipe ini mempunyai {{ row.global.count }} penilai.</span>
       {% endif %}
       </span>
@@ -67,16 +67,21 @@
     <p class="muted">Koreksi memakai rating yang sama, sehingga jumlah penilai tidak bertambah. Merk, tipe, dan lokasi tidak dapat diganti.</p>
     <form method="post" action="/ratings/{{ own_rating.id }}/koreksi" class="rating-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label><span>Tanggal memakai kursi</span><input type="date" name="usage_date" required max="{{ today.isoformat() }}" value="{{ display_version.usage_date.isoformat() if display_version else '' }}"></label>
+      <p class="notice warn" role="alert" tabindex="-1" data-score-error {% if not rating_error %}hidden{% endif %}>{{ rating_error or 'Beri bintang untuk sedikitnya satu area yang Anda rasakan.' }}</p>
+      <label><span>Tanggal memakai kursi</span><input type="date" name="usage_date" required {% if placement.effective_from %}min="{{ placement.effective_from.isoformat() }}"{% endif %} max="{{ (placement.effective_to if placement.effective_to and placement.effective_to < today else today).isoformat() }}" value="{{ submitted.get('usage_date', '') if submitted is not none else (display_version.usage_date.isoformat() if display_version else '') }}"></label>
       {% set current_scores = {} %}
       {% if display_version %}{% for score in display_version.scores %}{% set _ = current_scores.update({score.body_area_id: score.stars}) %}{% endfor %}{% endif %}
       {% for mapping in placement.chair_type.supported_areas|sort(attribute='body_area.sort_order') %}
         <div class="score-field">
           <span class="area-name"><strong>{{ mapping.body_area.label }}</strong>{% if mapping.mechanism %}<small>{{ mapping.mechanism | replace('_', ' ') }}</small>{% endif %}</span>
-          <span>{{ stars_input(mapping.body_area_id, 'correct', current_scores.get(mapping.body_area_id, 0)) }}<small class="score-help">Pilih “Tidak dinilai” bila area ini tidak Anda rasakan.</small></span>
+          <span>{{ stars_input(mapping.body_area_id, 'correct', submitted_scores.get(mapping.body_area_id, 0) if submitted is not none else current_scores.get(mapping.body_area_id, 0)) }}<small class="score-help">Pilih “Tidak dinilai” bila area ini tidak Anda rasakan.</small></span>
         </div>
       {% endfor %}
       <button class="button primary" type="submit">{{ icon('pencil') }} Kirim koreksi untuk diperiksa</button>
+    </form>
+    <form method="post" action="/ratings/{{ own_rating.id }}/hapus" class="inline-form danger-zone" data-confirm="Hapus rating ini beserta seluruh riwayat versinya? Rating yang sudah disetujui juga akan berhenti dihitung.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="button ghost danger" type="submit">{{ icon('trash-2') }} Hapus rating saya</button>
     </form>
   {% else %}
     <h2>Beri rating setelah memakai</h2>
@@ -84,11 +89,12 @@
     {% if current_user %}<p class="muted">Anda menilai dengan akun {{ current_user.name }}.</p>{% else %}<p class="muted">Anda menilai secara anonim. Token acak pada browser dipakai untuk mencegah rating ganda dan membantu pemeriksaan. Token itu hilang bila cookie dihapus.</p>{% endif %}
     <form method="post" action="/nilai/{{ placement.id }}" class="rating-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label><span>Tanggal memakai kursi</span><input type="date" name="usage_date" required max="{{ today.isoformat() }}"></label>
+      <p class="notice warn" role="alert" tabindex="-1" data-score-error {% if not rating_error %}hidden{% endif %}>{{ rating_error or 'Beri bintang untuk sedikitnya satu area yang Anda rasakan.' }}</p>
+      <label><span>Tanggal memakai kursi</span><input type="date" name="usage_date" required {% if placement.effective_from %}min="{{ placement.effective_from.isoformat() }}"{% endif %} max="{{ (placement.effective_to if placement.effective_to and placement.effective_to < today else today).isoformat() }}" value="{{ submitted.get('usage_date', '') if submitted is not none else '' }}"></label>
       {% for mapping in placement.chair_type.supported_areas|sort(attribute='body_area.sort_order') %}
         <div class="score-field">
           <span class="area-name"><strong>{{ mapping.body_area.label }}</strong>{% if mapping.mechanism %}<small>{{ mapping.mechanism | replace('_', ' ') }}</small>{% endif %}</span>
-          <span>{{ stars_input(mapping.body_area_id, 'new') }}<small class="score-help">Pilih “Tidak dinilai” bila area ini tidak Anda rasakan.</small></span>
+          <span>{{ stars_input(mapping.body_area_id, 'new', submitted_scores.get(mapping.body_area_id, 0)) }}<small class="score-help">Pilih “Tidak dinilai” bila area ini tidak Anda rasakan.</small></span>
         </div>
       {% endfor %}
       <button class="button primary" type="submit">{{ icon('star') }} Kirim rating untuk diperiksa</button>

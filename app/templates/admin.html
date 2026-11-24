@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, pager_nav %}
 {% block title %}Admin{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -7,6 +7,7 @@
   <h1>Admin</h1>
   <p><span class="num">{{ venue_count }}</span> gedung · <span class="num">{{ spot_count }}</span> titik. Periksa data dari antrean tertua.</p>
   <a class="button secondary" href="/admin/master-tipe">{{ icon('settings-2') }} Kelola fitur tipe kursi</a>
+  <a class="button secondary" href="/admin/export/spots.csv">{{ icon('map-pin') }} Ekspor CSV titik</a>
 </section>
 
 <section class="content-section">
@@ -21,6 +22,7 @@
     </div>
   {% endfor %}
   </div>
+  {{ pager_nav(loc_pager, loc_prefix, 'usulan') }}
   {% else %}<p>Tidak ada usulan lokasi yang menunggu.</p>{% endif %}
 </section>
 
@@ -48,6 +50,7 @@
     </article>
   {% endfor %}
   </div>
+  {{ pager_nav(rat_pager, rat_prefix, 'rating') }}
   {% else %}<p>Tidak ada rating yang menunggu.</p>{% endif %}
 </section>
 {% endblock %}
