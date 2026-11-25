@@ -1,8 +1,10 @@
 name: tests
 
+# Runs the fast test job on every branch push; full CI (lint, format, audit,
+# Python 3.11 + 3.15 matrix) runs on pull requests via ci.yml, so a second
+# pull_request trigger here would duplicate those runs.
 on:
   push:
-  pull_request:
 
 jobs:
   pytest:
@@ -13,5 +15,5 @@ jobs:
         with:
           python-version: "3.15"
           cache: pip
-      - run: python -m pip install -r requirements.txt
-      - run: python -m pytest -q
+      - run: python -m pip install --require-hashes -r requirements-dev.txt
+      - run: python -m pytest -q tests

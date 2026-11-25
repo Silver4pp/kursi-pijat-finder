@@ -52,7 +52,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip().upper() or "INFO"
 # Bind address for `python app/main.py`. Uvicorn started from the CLI takes its
 # own --host/--port, so these only apply to the direct-entry path.
 HOST = os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1"
-PORT = _env_int("PORT", 8000)
+PORT = _env_int("PORT", 8001)
 
 _VALID_SAMESITE = {"lax", "strict", "none"}
 _VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}

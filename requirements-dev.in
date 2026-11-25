@@ -2,6 +2,9 @@
 #   uv pip compile --generate-hashes requirements-dev.in -o requirements-dev.txt
 -r requirements.txt
 pytest>=9.2,<10.0
+# pytest's Windows-only dependency. Listed explicitly so the lockfile carries
+# its hashes even when compiled on a non-Windows machine.
+colorama>=0.4,<1.0
 httpx2>=2.16,<3.0
 ruff>=0.17,<1.0
 pip-audit>=2.10,<3.0

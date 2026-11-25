@@ -11,6 +11,17 @@ from pathlib import Path
 
 import pytest
 
+# starlette.testclient imports httpx2 and converts its absence into a confusing
+# StarletteDeprecationWarning (an error under pytest.ini's filterwarnings), so
+# fail fast with a message that names the actual fix.
+try:
+    import httpx2  # noqa: F401
+except ImportError as exc:
+    raise ImportError(
+        "httpx2 is required by starlette.testclient; "
+        "install it with: pip install --require-hashes -r requirements-dev.txt"
+    ) from exc
+
 # pytest resolves its rootdir to tests/ when it finds tests/pytest.ini, which puts
 # tests/ (not the project root) on sys.path. Insert the project root explicitly so
 # `from app import ...` works no matter how pytest is invoked.
